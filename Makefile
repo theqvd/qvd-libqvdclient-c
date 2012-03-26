@@ -7,7 +7,9 @@ SOURCE=qvdclientcore.c debug.c qvdbuffer.c qvdvm.c
 OBJ=qvdclientcore.o debug.o qvdbuffer.o qvdvm.o /usr/local/lib/libcurl.a
 QVDCLIENT=qvdclient
 QVDCLIENTOBJ=$(QVDCLIENT).o
-QVDCLIENTLIBS=-L/usr/local/lib -L. -lqvdclient -lcrypto -lssl -lldap -lidn -lrt -ljansson -lXcomp
+QVDCLIENTLIBLIBS=-L/usr/local/lib -L. -lcrypto -lssl -lldap -lidn -lrt -ljansson -lXcomp
+QVDCLIENTLIBS=-L/usr/local/lib -L. -lqvdclient
+#QVDCLIENTLIBS=-L/usr/local/lib -L. -lqvdclient -lcrypto -lssl -lldap -lidn -lrt -ljansson -lXcomp
 CFLAGS=-fPIC -g -I/usr/local/include
 
 # Agnostic to the make version
@@ -18,7 +20,7 @@ qvdclient: $(QVDCLIENTOBJ) $(QVDCLIENTLIB)
 	$(LD) -o $(QVDCLIENT) $(QVDCLIENTLIBS) $(QVDCLIENTOBJ)
 
 $(QVDCLIENTLIB): $(OBJ)
-	$(LD) -shared -o $(QVDCLIENTLIB) $(OBJ)
+	$(LD) -shared -o $(QVDCLIENTLIB) $(OBJ) $(QVDCLIENTLIBLIBS)
 
 clean:
 	rm -f *~ *.o

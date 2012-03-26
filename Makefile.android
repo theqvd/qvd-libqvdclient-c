@@ -26,7 +26,7 @@ qvdclient: $(QVDCLIENTOBJ) $(QVDCLIENTLIB)
 	$(LD) -fPIC -o $(QVDCLIENT) $(QVDCLIENTOBJ) -L. -lqvdclient -lz -lm
 
 $(QVDCLIENTLIB): $(OBJ) $(STATICLIBS) $(STDCLIB) 
-	$(CC) -shared -fPIC -o $@ $(OBJ) */*.o -lz -lm
+	$(CC) -shared -fPIC -o $@ $(OBJ) */*.o -lz -lm -llog
 
 $(STDCLIB): $(LIBSTDC)
 	mkdir $@

@@ -9,7 +9,7 @@
 #include <unistd.h>
 #include <curl/curl.h>
 /*#define BUFFER_SIZE CURL_MAX_WRITE_SIZE * 2 * 100 */
-#define BUFFER_SIZE CURL_MAX_WRITE_SIZE * 2 * 100
+#define BUFFER_SIZE CURL_MAX_WRITE_SIZE * 2
 #include "qvdbuffer.h"
 
 #define ABOUT "About: $Id$"
@@ -68,5 +68,7 @@ qvdclient *qvd_init(const char *hostname, const int port, const char *username, 
 vmlist *qvd_list_of_vm(qvdclient *qvd);
 int qvd_connect_to_vm(qvdclient *qvd, int id);
 void qvd_free(qvdclient *qvd);
-
+void qvd_set_geometry(qvdclient *qvd, const char *geometry);
+void qvd_set_fullscreen(qvdclient *qvd);
+void qvd_set_nofullscreen(qvdclient *qvd);
 #endif

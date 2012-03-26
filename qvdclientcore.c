@@ -17,7 +17,6 @@
 #include "qvdbuffer.h"
 #include "qvdvm.h"
 /*CURL *curl;*/
-
 int proxyConnect()
 {
   int proxyPair[2];
@@ -35,12 +34,12 @@ int proxyConnect()
 }
 
 /*
- * clientLoop
- *            --------------
- *            |            |
- * proxyFd ---| clientLoop |---connFd            
- * (X display)|            | (curl to remote host)
- *            --------------
+ * qvdClientLoop
+ *            -----------------
+ *            |               |
+ * proxyFd ---| qvdClientLoop |---connFd            
+ * (X display)|               | (curl to remote host)
+ *            -----------------
  * 
  *       -----   proxyRead  ---->
  *      <-----   proxyWrite ----
@@ -49,13 +48,15 @@ int proxyConnect()
  * We read from connFd and store it in the proxyWrite buffer and then write it ingo proxyFd (NX)
  *
  */
-int clientLoop(qvdclient *qvd, int connFd, int proxyFd)
+int qvdClientLoop(qvdclient *qvd, int connFd, int proxyFd)
 {
+  qvd_printf("qvdClientLoop\n");
   struct timeval timeout;
   fd_set rfds;
   fd_set wfds;
   int ret, err, maxfds;
   QvdBuffer proxyWrite, proxyRead;
+  qvd_printf("qvdClientLoop(%p, %d, %d)\n", qvd, connFd, proxyFd);
   QvdBufferInit(&proxyWrite);
   QvdBufferInit(&proxyRead);
   do
@@ -74,7 +75,7 @@ int clientLoop(qvdclient *qvd, int connFd, int proxyFd)
       if (NXTransPrepare(&maxfds, &rfds, &wfds, &timeout))
 	{
 #ifdef TRACE
-	  qvd_printf("clientLoop: executing select()\n");
+	  qvd_printf("qvdClientLoop: executing select()\n");
 #endif
 	  NXTransSelect(&ret, &err, &maxfds, &rfds, &wfds, &timeout);
 	  NXTransExecute(&ret, &err, &maxfds, &rfds, &wfds, &timeout);
@@ -84,7 +85,7 @@ int clientLoop(qvdclient *qvd, int connFd, int proxyFd)
 
       if (ret < 0)
 	{
-	  qvd_printf("clientLoop: select() %s\n", strerror(errno));
+	  qvd_printf("qvdClientLoop: select() %s\n", strerror(errno));
 	  return 1;
 	}
 #ifdef TRACE
@@ -395,13 +396,28 @@ int switch_protocols(qvdclient *qvd, int id) {
   return 0;
 }
 
+#ifndef ANDROID
+extern char **environ;
+#endif
 
+void _qvd_print_environ()
+{
+  if (environ == NULL)
+    qvd_printf("Environment variable not defined (NULL)");
+  char **ptr;
+  qvd_printf("Printing environment variables\n");
+  for (ptr=environ; *ptr != NULL; ptr ++)
+      qvd_printf("Environment var %s\n", *ptr);
+
+}
 int qvd_connect_to_vm(qvdclient *qvd, int id)
 {
   int result, proxyFd, fd;
   long curlsock;
 
+  qvd_printf("qvd_connect_to_vm(%p,%d)", qvd, id);
   result = switch_protocols(qvd, id);
+  _qvd_print_environ();
   /* if non zero return with error */
   if (result)
     return result;
@@ -413,7 +429,8 @@ int qvd_connect_to_vm(qvdclient *qvd, int id)
     return 4;
 
   qvd_printf("Remote fd: %d Local fd: %d\n", fd, proxyFd);
-  clientLoop(qvd, fd, proxyFd);
+  qvd_printf("Before qvdClientLoop\n");
+  qvdClientLoop(qvd, fd, proxyFd);
   shutdown(proxyFd, 2);
   return 0;
 }
