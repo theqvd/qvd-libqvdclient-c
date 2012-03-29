@@ -48,6 +48,7 @@ inline void set_debug_level(int level)
 }
 void _qvd_vprintf(const char *format, va_list args)
 {
+
 #ifdef ANDROID
   __android_log_vprint(get_debug_level(), "qvd", format args);
 #else
@@ -69,5 +70,16 @@ void qvd_printf(const char *format, ...)
   va_start(args, format);
   _qvd_vprintf(format, args);
   va_end(args);
-
 }
+
+void qvd_error(qvdclient *qvd, const char *format, ...)
+{
+  va_list args;
+  va_start(args, format);
+  _qvd_vprintf(format, args);
+  va_end(args);
+
+  vsnprintf(qvd->error_buffer, MAX_ERROR_BUFFER, format, args);
+  qvd->error_buffer[MAX_ERROR_BUFFER-1] = '\0';
+}
+

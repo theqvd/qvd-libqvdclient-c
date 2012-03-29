@@ -5,7 +5,7 @@
 vm *QvdVmNew(int id, const char *name, const char *state, int blocked);
 void QvdVmFree(vm *ptr);
 void QvdVmListInit(vmlist *ptr);
-void QvdVmListAppendVm(vmlist *vmlistptr, vm *vmptr);
+void QvdVmListAppendVm(qvdclient *qvd, vmlist *vmlistptr, vm *vmptr);
 void QvdVmListFree(vmlist *vmlistptr);
 
 #endif

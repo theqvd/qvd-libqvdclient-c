@@ -8,7 +8,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <curl/curl.h>
-/*#define BUFFER_SIZE CURL_MAX_WRITE_SIZE * 2 * 100 */
+/* Also used for vm list  normall y 16KB*2 */
 #define BUFFER_SIZE CURL_MAX_WRITE_SIZE * 2
 #include "qvdbuffer.h"
 
@@ -20,6 +20,10 @@
 #define MAX_AUTHDIGEST 4+MAX_USERPWD*4/3
 #define MAX_BASEURL 1024
 #define MAX_PARAM 32
+#define MAX_ERROR_BUFFER 256
+#define MAXDISPLAYSTRING 256
+#define MAX_HTTP_RESPONSES_FOR_UPGRADE 10
+
 /* the buffer size is 32K */
 #define MAX(x,y) ((x) > (y) ? (x) : (y))
 #define MIN(x,y) ((x) < (y) ? (x) : (y))
@@ -42,7 +46,7 @@ typedef struct vmliststruct vmlist;
 typedef struct {
   CURL *curl;
   CURLcode res;
-  /*  char error_buffer[CURL_ERROR_SIZE]; */
+  char error_buffer[MAX_ERROR_BUFFER];
   const char *hostname;
   int port;
   const char *username;
@@ -59,7 +63,7 @@ typedef struct {
   const char *keyboard;
   int print_enabled;
   int fullscreen;
-
+  char display[MAXDISPLAYSTRING];
 } qvdclient;
 
 
@@ -71,4 +75,7 @@ void qvd_free(qvdclient *qvd);
 void qvd_set_geometry(qvdclient *qvd, const char *geometry);
 void qvd_set_fullscreen(qvdclient *qvd);
 void qvd_set_nofullscreen(qvdclient *qvd);
+void qvd_set_debug();
+void qvd_set_display(qvdclient *qvd, const char *display);
+char *qvd_get_last_error(qvdclient *qvd);
 #endif
