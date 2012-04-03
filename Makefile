@@ -23,7 +23,7 @@ android:
 	$(eval LD=arm-linux-androideabi-gcc)
 	$(eval RANLIB=arm-linux-androideabi-ranlib)
 	$(eval AR=arm-linux-androideabi-ar)
-	$(eval CFLAGS=-fPIC -g -I$(LIBDIR)/curl/include -I$(LIBDIR)/jansson/include -I$(LIBDIR)/nxcomp/include -I$(LIBDIR)/openssl/include)
+	$(eval CFLAGS=-fPIC -DANDROID -g -I$(LIBDIR)/curl/include -I$(LIBDIR)/jansson/include -I$(LIBDIR)/nxcomp/include -I$(LIBDIR)/openssl/include)
 	$(eval QVDCLIENTLIBS= -L. -lqvdclient -lz -lm -llog)
 	$(eval QVDCLIENTLIBLIBS= -L. -lz -lm -llog)
 	$(eval STATICLIBS=libcrypto libssl libcurl libjansson libXcomp libpng libjpeg)
