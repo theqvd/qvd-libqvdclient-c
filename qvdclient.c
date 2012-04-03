@@ -102,12 +102,14 @@ int main(int argc, char *argv[], char *envp[]) {
 
   if (qvd_list_of_vm(qvd) == NULL)
     {
-            printf("Error fetching vm for user %s in host %s\n", user, host);
+      printf("Error fetching vm for user %s in host %s\n", user, host);
+      qvd_free(qvd);
       return 5;
     }
   if (qvd->numvms < 0)
     {
       printf("No vms found for user %s in host %s\n", user, host);
+      qvd_free(qvd);
       return 2;
     }
 
