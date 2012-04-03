@@ -22,6 +22,7 @@
 #define MAX_PARAM 32
 #define MAX_ERROR_BUFFER 256
 #define MAXDISPLAYSTRING 256
+#define MAXHOMESTRING 128
 #define MAX_HTTP_RESPONSES_FOR_UPGRADE 10
 
 /* the buffer size is 32K */
@@ -47,10 +48,10 @@ typedef struct {
   CURL *curl;
   CURLcode res;
   char error_buffer[MAX_ERROR_BUFFER];
-  const char *hostname;
+  char hostname[MAX_BASEURL];
   int port;
-  const char *username;
-  const char *password;
+  char username[MAX_USERPWD];
+  char password[MAX_USERPWD];
   char userpwd[MAX_USERPWD];
   char authdigest[MAX_AUTHDIGEST];
   char baseurl[MAX_BASEURL];
@@ -64,6 +65,7 @@ typedef struct {
   int print_enabled;
   int fullscreen;
   char display[MAXDISPLAYSTRING];
+  char home[MAXHOMESTRING];
 } qvdclient;
 
 
@@ -77,5 +79,6 @@ void qvd_set_fullscreen(qvdclient *qvd);
 void qvd_set_nofullscreen(qvdclient *qvd);
 void qvd_set_debug();
 void qvd_set_display(qvdclient *qvd, const char *display);
+void qvd_set_home(qvdclient *qvd, const char *home);
 char *qvd_get_last_error(qvdclient *qvd);
 #endif

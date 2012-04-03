@@ -44,13 +44,14 @@ inline int get_debug_level(void) {
 
 inline void set_debug_level(int level)
 {
+  _qvd_init_debug();
   qvd_global_debug_level = level;
 }
 void _qvd_vprintf(const char *format, va_list args)
 {
 
 #ifdef ANDROID
-  __android_log_vprint(get_debug_level(), "qvd", format args);
+  __android_log_vprint(get_debug_level(), "qvd", format, args);
 #else
   vfprintf(global_debug_file, format, args);
   fflush(global_debug_file);

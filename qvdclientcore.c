@@ -27,7 +27,7 @@ int proxyConnect(qvdclient *qvd)
     }
   if (NXTransCreate(proxyPair[0], NX_MODE_SERVER, "nx/nx,data=0,delta=0,cache=16384,pack=0:0") < 0)
     {
-      qvd_printf(qvd, "Error creating proxy transport <%s>\n", strerror(errno));
+      qvd_error(qvd, "Error creating proxy transport <%s>\n", strerror(errno));
       return -1;
     }
   return proxyPair[1];
@@ -85,7 +85,7 @@ int qvdClientLoop(qvdclient *qvd, int connFd, int proxyFd)
 
       if (ret < 0)
 	{
-	  qvd_printf("Error in qvdClientLoop: select() %s\n", strerror(errno));
+	  qvd_error("Error in qvdClientLoop: select() %s\n", strerror(errno));
 	  return 1;
 	}
 #ifdef TRACE
@@ -188,7 +188,7 @@ qvdclient *qvd_init(const char *hostname, const int port, const char *username, 
   }
 
   if (strlen(hostname) + 6 + strlen("https:///") + 2 > MAX_BASEURL) {
-    qvd_printf(qvd, "Length of hostname and port + scheme  + 2 is longer than %d\n", MAX_BASEURL);
+    qvd_error(qvd, "Length of hostname and port + scheme  + 2 is longer than %d\n", MAX_BASEURL);
     return NULL;
   }
 
@@ -233,10 +233,13 @@ qvdclient *qvd_init(const char *hostname, const int port, const char *username, 
   curl_easy_setopt(qvd->curl, CURLOPT_WRITEDATA, &(qvd->buffer));
 
   /* Copy parameters */
-  qvd->hostname = hostname;
+  strncpy(qvd->hostname, hostname, MAX_BASEURL);
+  qvd->hostname[MAX_BASEURL - 1] = '\0';
   qvd->port = port;
-  qvd->username = username;
-  qvd->password = password;
+  strncpy(qvd->username, username, MAX_USERPWD);
+  qvd->username[MAX_USERPWD - 1] = '\0';
+  strncpy(qvd->password, password, MAX_USERPWD);
+  qvd->password[MAX_USERPWD - 1] = '\0';
   qvd->numvms = 0;
   qvd->link = "adsl";
   qvd->geometry = "800x600";
@@ -245,6 +248,7 @@ qvdclient *qvd_init(const char *hostname, const int port, const char *username, 
   qvd->fullscreen = 0;
   qvd->print_enabled = 0;
   *(qvd->display) = '\0';
+  *(qvd->home) = '\0';
   strcpy(qvd->error_buffer, "");
   QvdBufferInit(&(qvd->buffer));
 
@@ -420,11 +424,19 @@ int qvd_connect_to_vm(qvdclient *qvd, int id)
 
   qvd_printf("qvd_connect_to_vm(%p,%d)", qvd, id);
   if (qvd->display && (*(qvd->display)) != '\0') {
-    qvd_printf("Setting display to %s", qvd->display);
+    qvd_printf("Setting DISPLAY to %s", qvd->display);
     if (setenv("DISPLAY", qvd->display, 1)) {
-      qvd_error(qvd, "Error setting display to %s. errno: %d (%s)", qvd->display, errno, strerror(errno));
+      qvd_error(qvd, "Error setting DISPLAY to %s. errno: %d (%s)", qvd->display, errno, strerror(errno));
     }
   }
+  if (qvd->home && (*(qvd->home)) != '\0') {
+    qvd_printf("Setting NX_HOME to %s", qvd->display);
+    if (setenv("NX_HOME", qvd->home, 1)) {
+      qvd_error(qvd, "Error setting NX_HOME to %s. errno: %d (%s)", qvd->home, errno, strerror(errno));
+    }
+  }
+
+
   result = switch_protocols(qvd, id);
   _qvd_print_environ();
   /* if non zero return with error */
@@ -464,6 +476,11 @@ void qvd_set_debug() {
 void qvd_set_display(qvdclient *qvd, const char *display) {
   strncpy(qvd->display, display, MAXDISPLAYSTRING);
   qvd->display[MAXDISPLAYSTRING - 1] = '\0';
+}
+
+void qvd_set_home(qvdclient *qvd, const char *home) {
+  strncpy(qvd->home, home, MAXHOMESTRING);
+  qvd->home[MAXHOMESTRING - 1] = '\0';
 }
 
 char *qvd_get_last_error(qvdclient *qvd) {
