@@ -31,7 +31,7 @@ int parse_params(int argc, char **argv, const char **host, int *port, const char
 	  help(program);
 	  break;
 	case 'd':
-	  /*	  set_debug_level(1); */
+	  set_debug_level(2);
 	  break;
 	case 'h':
 	  *host = optarg;
@@ -100,7 +100,11 @@ int main(int argc, char *argv[], char *envp[]) {
   if (fullscreen)
     qvd_set_fullscreen(qvd);
 
-  qvd_list_of_vm(qvd);
+  if (qvd_list_of_vm(qvd) == NULL)
+    {
+            printf("Error fetching vm for user %s in host %s\n", user, host);
+      return 5;
+    }
   if (qvd->numvms < 0)
     {
       printf("No vms found for user %s in host %s\n", user, host);
