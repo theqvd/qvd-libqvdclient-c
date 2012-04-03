@@ -35,7 +35,9 @@ void QvdBufferReset(QvdBuffer *self)
 #endif
   self->offset = 0;
   self->size = 0;
+#ifdef TRACE
   qvd_printf("QvdBufferReset offset=%d, size=%d\n", self->offset, self->size);
+#endif
 }
 
 int QvdBufferAppend(QvdBuffer *self, const char *data, size_t count)
@@ -46,7 +48,9 @@ int QvdBufferAppend(QvdBuffer *self, const char *data, size_t count)
   size_t bytes_to_copy = MIN(count, BUFFER_SIZE - self->size);
   memcpy(self->data+self->size, data, bytes_to_copy);
   self->size += count;
+#ifdef TRACE
   qvd_printf("QvdBufferReset offset=%d, size=%d\n", self->offset, self->size);
+#endif
   return bytes_to_copy;
 }
 

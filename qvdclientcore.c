@@ -152,7 +152,9 @@ int qvdClientLoop(qvdclient *qvd, int connFd, int proxyFd)
 	    else
 	      {
 		proxyRead.offset += written;
+#ifdef TRACE
 		qvd_printf("curl: send'd %ld\n", written);
+#endif
 		if (proxyRead.offset >= proxyRead.size) {
 		  QvdBufferReset(&proxyRead);
 		}
