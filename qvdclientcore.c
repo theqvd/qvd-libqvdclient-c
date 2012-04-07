@@ -285,7 +285,7 @@ vmlist *qvd_list_of_vm(qvdclient *qvd) {
   /*  curl_easy_setopt(curl, CURLOPT_WRITEDATA, &jsonBuffer); */
   qvd->res = curl_easy_perform(qvd->curl);
   if (qvd->res) {
-    qvd_error(qvd, "An error ocurred geting url <%s>: %d <%s>\n", url, qvd->res, curl_easy_strerror(qvd->res));
+    qvd_error(qvd, "An error ocurred getting url <%s>: %d <%s>\n", url, qvd->res, curl_easy_strerror(qvd->res));
     return NULL;
   }
 
@@ -366,7 +366,7 @@ int switch_protocols(qvdclient *qvd, int id) {
 
 
   /*  if (snprintf(url, MAX_BASEURL, "GET /qvd/connect_to_vm?id=%d&qvd.client.os=%s&qvd.client.fullscreen=%d&qvd.client.geometry=%s&qvd.client.link=%s&qvd.client.keyboard=%s&qvd.client.printing.enabled=%d HTTP/1.1\nAuthorization: Basic %s\nConnection: Upgrade\nUpgrade: QVD/1.0\n\n", id, qvd->os, qvd->fullscreen, qvd->geometry, qvd->link, qvd->keyboard, qvd->print_enabled, qvd->authdigest) >= MAX_BASEURL) { */
-  if (snprintf(url, MAX_BASEURL, "GET /qvd/connect_to_vm?id=%d&qvd.client.os=%s&qvd.client.geometry=%s&qvd.client.link=%s&qvd.client.keyboard=%s HTTP/1.1\nAuthorization: Basic %s\nConnection: Upgrade\nUpgrade: QVD/1.0\n\n", id, qvd->os, qvd->geometry, qvd->link, qvd->keyboard, qvd->authdigest) >= MAX_BASEURL) {
+  if (snprintf(url, MAX_BASEURL, "GET /qvd/connect_to_vm?id=%d&qvd.client.os=%s&qvd.client.geometry=%s&qvd.client.link=%s&qvd.client.keyboard=%s&qvd.client.fullscreen=%d HTTP/1.1\nAuthorization: Basic %s\nConnection: Upgrade\nUpgrade: QVD/1.0\n\n", id, qvd->os, qvd->geometry, qvd->link, qvd->keyboard, qvd->fullscreen, qvd->authdigest) >= MAX_BASEURL) {
     qvd_error(qvd, "Error initializing authdigest\n");
     return 1;
   }
@@ -391,7 +391,7 @@ int switch_protocols(qvdclient *qvd, int id) {
       return 2;
     }
     qvd->buffer.data[bytes_sent] = 0;
-    qvd_error(qvd, "%d input received was <%s>\n", i, qvd->buffer.data);
+    qvd_printf(qvd, "%d input received was <%s>\n", i, qvd->buffer.data);
     if (strstr(qvd->buffer.data, "HTTP/1.1 101")) {
       qvd_printf("Upgrade of protocol was done\n");
       break;
