@@ -223,8 +223,13 @@ qvdclient *qvd_init(const char *hostname, const int port, const char *username, 
   }
   if (get_debug_level()) 
     curl_easy_setopt(qvd->curl, CURLOPT_VERBOSE, 1L);
-  /*curl_easy_setopt(qvd->curl, CURLOPT_ERRORBUFFER, qvd->error_buffer);*/
   /* TODO fix ssl settings */
+  /* Set CURLOPT_SSL_VERIFYPEER to 1 (default) */
+  /* Set CURLOPT_SSL_VERIFYHOST to 2 (default, certificate issuer must match and match cn) */
+  /* Set CURLOPT_SSL_CAPATH to a location of the path with certificates */
+  /* Set CURLOPT_CERTINFO to 1 (be able to get certificate info with curl_easy_getinfo and CURLINFO_CERTINFO) */
+  /* Set up also a function in qvdclient.h to check for certificateerror if null was returned */
+
 
   curl_easy_setopt(qvd->curl, CURLOPT_TCP_NODELAY, 1L);
   curl_easy_setopt(qvd->curl, CURLOPT_SSL_VERIFYPEER, 0L);
