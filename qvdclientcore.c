@@ -26,7 +26,7 @@ int proxyConnect(qvdclient *qvd)
       return -1;
     }
   /*  if (NXTransCreate(proxyPair[0], NX_MODE_SERVER, "nx/nx,data=0,delta=0,cache=16384,pack=0:0") < 0)*/
-  if (NXTransCreate(proxyPair[0], NX_MODE_SERVER, "nx/nx,cache=16384") < 0)
+  if (NXTransCreate(proxyPair[0], NX_MODE_SERVER, "nx/nx,cache=16384:0") < 0)
     {
       qvd_error(qvd, "Error creating proxy transport <%s>\n", strerror(errno));
       return -1;
