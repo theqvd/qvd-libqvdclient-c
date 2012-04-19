@@ -24,6 +24,14 @@
 #define MAXDISPLAYSTRING 256
 #define MAXHOMESTRING 128
 #define MAX_HTTP_RESPONSES_FOR_UPGRADE 10
+#define DEFAULT_USERAGENT_PRODUCT "QVD/3.1"
+#define MAX_USERAGENT 128
+#define MAX_OS 128
+#define DEFAULT_OS "linux"
+#define MAX_GEOMETRY 128
+#define DEFAULT_GEOMETRY "800x600"
+#define MAX_LINK 128
+#define DEFAULT_LINK "adsl"
 
 /* the buffer size is 32K */
 #define MAX(x,y) ((x) > (y) ? (x) : (y))
@@ -58,14 +66,15 @@ typedef struct {
   int numvms;
   vmlist *vmlist;
   QvdBuffer buffer;
-  const char *link;
-  const char *geometry;
-  const char *os;
+  char link[MAX_LINK];
+  char geometry[MAX_GEOMETRY];
+  char os[MAX_OS];
   const char *keyboard;
   int print_enabled;
   int fullscreen;
   char display[MAXDISPLAYSTRING];
   char home[MAXHOMESTRING];
+  char useragent[MAX_USERAGENT];
 } qvdclient;
 
 
@@ -80,5 +89,9 @@ void qvd_set_nofullscreen(qvdclient *qvd);
 void qvd_set_debug();
 void qvd_set_display(qvdclient *qvd, const char *display);
 void qvd_set_home(qvdclient *qvd, const char *home);
+void qvd_set_useragent(qvdclient *qvd, const char *useragent);
+void qvd_set_os(qvdclient *qvd, const char *os);
+void qvd_set_geometry(qvdclient *qvd, const char *geometry);
+void qvd_set_link(qvdclient *qvd, const char *link);
 char *qvd_get_last_error(qvdclient *qvd);
 #endif

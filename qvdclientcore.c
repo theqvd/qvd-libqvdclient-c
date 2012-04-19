@@ -177,7 +177,8 @@ int qvdClientLoop(qvdclient *qvd, int connFd, int proxyFd)
 }
 
 size_t
-WriteBufferCallback(void *contents, size_t size, size_t nmemb, void *buffer) {
+WriteBufferCallback(void *contents, size_t size, size_t nmemb, void *buffer) 
+{
     size_t realsize = size*nmemb;
     size_t bytes_written = QvdBufferAppend((QvdBuffer*)buffer, contents, realsize);
     return bytes_written;
@@ -201,7 +202,7 @@ qvdclient *qvd_init(const char *hostname, const int port, const char *username, 
   }
   
   if (snprintf(qvd->userpwd, MAX_USERPWD, "%s:%s", username, password) >= MAX_USERPWD) {
-    qvd_error(qvd, "Error initializing userpwd\n");
+    qvd_error(qvd, "Error initializing userpwd (string too long)\n");
     free(qvd);
     return NULL;
   }
@@ -212,10 +213,16 @@ qvdclient *qvd_init(const char *hostname, const int port, const char *username, 
     }
 
   if (snprintf(qvd->baseurl, MAX_BASEURL, "https://%s:%d", hostname, port) >= MAX_BASEURL) {
-    qvd_error(qvd, "Error initializing baseurl\n");
+    qvd_error(qvd, "Error initializing baseurl(string too long)\n");
     free(qvd);
     return NULL;
   }
+  if (snprintf(qvd->useragent, MAX_USERAGENT, "%s %s", DEFAULT_USERAGENT_PRODUCT, curl_version()) >= MAX_USERAGENT) {
+    qvd_error(qvd, "Error initializing useragent (string too long)\n");
+    free(qvd);
+    return NULL;
+  }
+
   qvd->curl = curl_easy_init();
   if (!qvd->curl) {
     qvd_error(qvd, "Error initializing curl\n");
@@ -239,6 +246,7 @@ qvdclient *qvd_init(const char *hostname, const int port, const char *username, 
   curl_easy_setopt(qvd->curl, CURLOPT_USERPWD, qvd->userpwd);
   curl_easy_setopt(qvd->curl, CURLOPT_WRITEFUNCTION, WriteBufferCallback);
   curl_easy_setopt(qvd->curl, CURLOPT_WRITEDATA, &(qvd->buffer));
+  curl_easy_setopt(qvd->curl, CURLOPT_USERAGENT, qvd->useragent);
 
   /* Copy parameters */
   strncpy(qvd->hostname, hostname, MAX_BASEURL);
@@ -249,9 +257,9 @@ qvdclient *qvd_init(const char *hostname, const int port, const char *username, 
   strncpy(qvd->password, password, MAX_USERPWD);
   qvd->password[MAX_USERPWD - 1] = '\0';
   qvd->numvms = 0;
-  qvd->link = "adsl";
-  qvd->geometry = "800x600";
-  qvd->os = "linux";
+  qvd_set_link(qvd, DEFAULT_LINK);
+  qvd_set_geometry(qvd, DEFAULT_GEOMETRY);
+  qvd_set_os(qvd, DEFAULT_OS);
   qvd->keyboard = "pc%2F105";
   qvd->fullscreen = 0;
   qvd->print_enabled = 0;
@@ -467,10 +475,6 @@ int qvd_connect_to_vm(qvdclient *qvd, int id)
 /*
  * TODO set general way to set options
  */
-void qvd_set_geometry(qvdclient *qvd, const char *geometry) {
-  qvd_printf("Setting geometry to %s", geometry);
-  qvd->geometry = geometry;
-}
 void qvd_set_fullscreen(qvdclient *qvd) {
   qvd->fullscreen = 1;
 }
@@ -493,4 +497,22 @@ void qvd_set_home(qvdclient *qvd, const char *home) {
 
 char *qvd_get_last_error(qvdclient *qvd) {
   return qvd->error_buffer;
+}
+
+void qvd_set_useragent(qvdclient *qvd, const char *useragent) {
+  strncpy(qvd->useragent, useragent, MAX_USERAGENT);
+  qvd->useragent[MAX_USERAGENT - 1] = '\0';
+  curl_easy_setopt(qvd->curl, CURLOPT_USERAGENT, qvd->useragent);
+}
+void qvd_set_os(qvdclient *qvd, const char *os) {
+  strncpy(qvd->os, os, MAX_OS);
+  qvd->os[MAX_OS - 1] = '\0';
+}
+void qvd_set_geometry(qvdclient *qvd, const char *geometry) {
+  strncpy(qvd->geometry, geometry, MAX_GEOMETRY);
+  qvd->os[MAX_GEOMETRY - 1] = '\0';
+}
+void qvd_set_link(qvdclient *qvd, const char *link) {
+  strncpy(qvd->link, link, MAX_LINK);
+  qvd->os[MAX_LINK - 1] = '\0';
 }
