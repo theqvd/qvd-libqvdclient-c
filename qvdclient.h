@@ -33,6 +33,9 @@
 #define MAX_LINK 128
 #define DEFAULT_LINK "adsl"
 
+#define STRICTSSL 1
+
+
 /* the buffer size is 32K */
 #define MAX(x,y) ((x) > (y) ? (x) : (y))
 #define MIN(x,y) ((x) < (y) ? (x) : (y))
@@ -75,6 +78,10 @@ typedef struct {
   char display[MAXDISPLAYSTRING];
   char home[MAXHOMESTRING];
   char useragent[MAX_USERAGENT];
+#ifdef STRICTSSL
+  /* TODO define function pointer for callback */
+  /* TODO define strictssl = 0, by default always 1 */
+#endif
 } qvdclient;
 
 

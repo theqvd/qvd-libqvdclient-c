@@ -15,15 +15,16 @@ void help(const char *program)
   printf("  -w : indicates the password for the user\n");
   printf("  -g : indicates the geometry wxh. Example -g 1024x768\n");
   printf("  -f : Use fullscreen\n");
+  printf("  -l : Use only list_of_vm (don't try to connect, useful for debugging)\n");
 }
 
-int parse_params(int argc, char **argv, const char **host, int *port, const char **user, const char **pass, const char **geometry, int *fullscreen)
+int parse_params(int argc, char **argv, const char **host, int *port, const char **user, const char **pass, const char **geometry, int *fullscreen, int *only_list_of_vm)
 {
   int opt, error = 0;
   const char *program = argv[0];
   char *endptr;
 
-  while ((opt = getopt(argc, argv, "?dh:p:u:w:g:f")) != -1 )
+  while ((opt = getopt(argc, argv, "?dh:p:u:w:g:fl")) != -1 )
     {
       switch (opt)
 	{
@@ -55,8 +56,11 @@ int parse_params(int argc, char **argv, const char **host, int *port, const char
 	case 'f':
 	  *fullscreen = 1;
 	  break;
+	case 'l':
+	  *only_list_of_vm = 1;
+	  break;
 	default:
-	  fprintf(stderr, "Parameter not recognized\n");
+	  fprintf(stderr, "Parameter not recognized <%c>\n", opt);
 	  error = 1;
 	}
     }
@@ -89,8 +93,8 @@ int parse_params(int argc, char **argv, const char **host, int *port, const char
 int main(int argc, char *argv[], char *envp[]) {
   qvdclient *qvd;
   const char *host = NULL, *user = NULL, *pass = NULL, *geometry = NULL;
-  int port = 8443, fullscreen=0, vm_id;
-  if (parse_params(argc, argv, &host, &port, &user, &pass, &geometry, &fullscreen))
+  int port = 8443, fullscreen=0, vm_id, only_list_of_vm=0;
+  if (parse_params(argc, argv, &host, &port, &user, &pass, &geometry, &fullscreen, &only_list_of_vm))
     return 1;
 
   qvd = qvd_init(host, port, user, pass);
@@ -112,7 +116,11 @@ int main(int argc, char *argv[], char *envp[]) {
       qvd_free(qvd);
       return 2;
     }
-
+  if (only_list_of_vm)
+    {
+      printf("No more acctions, -l has been specified\n");
+      return 0;
+    }
   /* TODO select VM, for now use the first one*/
   vm_id = qvd->vmlist->data->id;
   printf("Connecting to the first vm: vm_id %d\n", vm_id);
