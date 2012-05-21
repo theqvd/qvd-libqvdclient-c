@@ -16,15 +16,16 @@ void help(const char *program)
   printf("  -g : indicates the geometry wxh. Example -g 1024x768\n");
   printf("  -f : Use fullscreen\n");
   printf("  -l : Use only list_of_vm (don't try to connect, useful for debugging)\n");
+  printf("  -o : Assume One VM, that is connect always to the first VM (useful for debugging)\n");
 }
 
-int parse_params(int argc, char **argv, const char **host, int *port, const char **user, const char **pass, const char **geometry, int *fullscreen, int *only_list_of_vm)
+int parse_params(int argc, char **argv, const char **host, int *port, const char **user, const char **pass, const char **geometry, int *fullscreen, int *only_list_of_vm, int *one_vm)
 {
   int opt, error = 0;
   const char *program = argv[0];
   char *endptr;
 
-  while ((opt = getopt(argc, argv, "?dh:p:u:w:g:fl")) != -1 )
+  while ((opt = getopt(argc, argv, "?dh:p:u:w:g:flo")) != -1 )
     {
       switch (opt)
 	{
@@ -59,6 +60,9 @@ int parse_params(int argc, char **argv, const char **host, int *port, const char
 	case 'l':
 	  *only_list_of_vm = 1;
 	  break;
+	case 'o':
+	  *one_vm = 1;
+	  break;
 	default:
 	  fprintf(stderr, "Parameter not recognized <%c>\n", opt);
 	  error = 1;
@@ -89,12 +93,52 @@ int parse_params(int argc, char **argv, const char **host, int *port, const char
   return error;
 }
 
+#define YES_NO_SIZE 20
+int accept_unknown_cert_callback(const char *cert_pem_str, const char *cert_pem_data)
+{
+  char answer[YES_NO_SIZE];
+  int result;
+  printf("Unknown cert:\n%s\n\nDo you want to accept it?", cert_pem_str);
+  scanf("%20s", answer);
+  result = (strncmp(answer, "y", YES_NO_SIZE) == 0  || 
+	    strncmp(answer, "yes", YES_NO_SIZE) == 0  || 
+	    strncmp(answer, "Y", YES_NO_SIZE) == 0  || 
+	    strncmp(answer, "Yes", YES_NO_SIZE) == 0  || 
+	    strncmp(answer, "YES", YES_NO_SIZE) == 0);
+  return result;
+}
+
+
+int choose_vmid(vmlist *vm)
+{
+  int vm_id = -1;
+  vmlist *ptr;
+
+  while (vm_id == -1)
+    {
+      printf("List of vms:\n");
+      for (ptr=vm; ptr != NULL; ptr = ptr->next)
+	printf("VM ID:%d NAME:%s STATE:%s BLOCKED:%d\n", 
+	       ptr->data->id, ptr->data->name, ptr->data->state, ptr->data->blocked);
+      printf("Choose vmid: ");
+      scanf("%d", &vm_id);
+      for (ptr=vm; ptr != NULL; ptr = ptr->next)
+	if (ptr->data->id == vm_id)
+	  {
+	    printf("You have chosen VM ID:%d NAME:%s STATE:%s BLOCKED:%d\n", 
+		   ptr->data->id, ptr->data->name, ptr->data->state, ptr->data->blocked);
+	    return vm_id;
+	  }
+      printf("VM id not found. Please try again\n");
+      vm_id = -1;
+    }
+}
 
 int main(int argc, char *argv[], char *envp[]) {
   qvdclient *qvd;
   const char *host = NULL, *user = NULL, *pass = NULL, *geometry = NULL;
-  int port = 8443, fullscreen=0, vm_id, only_list_of_vm=0;
-  if (parse_params(argc, argv, &host, &port, &user, &pass, &geometry, &fullscreen, &only_list_of_vm))
+  int port = 8443, fullscreen=0, vm_id, only_list_of_vm=0, one_vm=0;
+  if (parse_params(argc, argv, &host, &port, &user, &pass, &geometry, &fullscreen, &only_list_of_vm, &one_vm))
     return 1;
 
   qvd = qvd_init(host, port, user, pass);
@@ -103,6 +147,8 @@ int main(int argc, char *argv[], char *envp[]) {
     qvd_set_geometry(qvd, geometry);
   if (fullscreen)
     qvd_set_fullscreen(qvd);
+
+  qvd_set_unknown_cert_callback(qvd, accept_unknown_cert_callback);
 
   if (qvd_list_of_vm(qvd) == NULL)
     {
@@ -116,14 +162,28 @@ int main(int argc, char *argv[], char *envp[]) {
       qvd_free(qvd);
       return 2;
     }
+
+  if (one_vm || qvd->numvms == 1)
+    {
+      /* TODO select VM, for now use the first one*/
+      vm_id = qvd->vmlist->data->id;
+      printf("Connecting to the first vm: vm_id %d\n", vm_id);
+    }
+  else
+    {
+      vm_id = choose_vmid(qvd->vmlist);
+    }
+  if (vm_id < 0)
+    {
+      printf("Error choosing vm_id: %d\n");
+      return 6;
+    }
   if (only_list_of_vm)
     {
       printf("No more acctions, -l has been specified\n");
       return 0;
     }
-  /* TODO select VM, for now use the first one*/
-  vm_id = qvd->vmlist->data->id;
-  printf("Connecting to the first vm: vm_id %d\n", vm_id);
+
   qvd_connect_to_vm(qvd, vm_id);
   qvd_free(qvd);
   return 0;

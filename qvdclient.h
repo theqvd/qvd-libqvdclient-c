@@ -79,6 +79,8 @@ typedef struct {
   char home[MAXHOMESTRING];
   char useragent[MAX_USERAGENT];
 #ifdef STRICTSSL
+  int ssl_no_cert_check;
+  int (*ssl_verify_callback)(const char *cert_pem_str, const char *cert_pem_data);
   /* TODO define function pointer for callback */
   /* TODO define strictssl = 0, by default always 1 */
 #endif
@@ -100,5 +102,6 @@ void qvd_set_useragent(qvdclient *qvd, const char *useragent);
 void qvd_set_os(qvdclient *qvd, const char *os);
 void qvd_set_geometry(qvdclient *qvd, const char *geometry);
 void qvd_set_link(qvdclient *qvd, const char *link);
+void qvd_set_unknown_cert_callback(qvdclient *qvd, int (*ssl_verify_callback)(const char *cert_pem_str, const char *cert_pem_data));
 char *qvd_get_last_error(qvdclient *qvd);
 #endif

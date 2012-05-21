@@ -5,6 +5,9 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/select.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
@@ -26,8 +29,8 @@ static int _qvd_ssl_index;
 int _qvd_proxy_connect(qvdclient *qvd);
 int _qvd_client_loop(qvdclient *qvd, int connFd, int proxyFd);
 size_t _qvd_write_buffer_callback(void *contents, size_t size, size_t nmemb, void *buffer);
-static void _qvd_dumpcert(X509 *x);
-void _qvd_print_certificate(X509 *cert);
+/* static void _qvd_dumpcert(X509 *x); */
+/* void _qvd_print_certificate(X509 *cert); */
 int _qvd_verify_cert_callback(int preverify_ok, X509_STORE_CTX *x509_ctx);
 CURLcode _qvd_sslctxfun(CURL *curl, SSL_CTX *sslctx, void *parm);
 int _qvd_set_base64_auth(qvdclient *qvd);
@@ -94,8 +97,10 @@ qvdclient *qvd_init(const char *hostname, const int port, const char *username, 
   /* Set up also a function in qvdclient.h to check for certificateerror if null was returned */
 
 #ifdef STRICTSSL
-  curl_easy_setopt(qvd->curl, CURLOPT_SSL_VERIFYPEER, 1L);
-  curl_easy_setopt(qvd->curl, CURLOPT_SSL_VERIFYHOST, 2L);
+  /* curl_easy_setopt(qvd->curl, CURLOPT_SSL_VERIFYPEER, 1L); */
+  /* curl_easy_setopt(qvd->curl, CURLOPT_SSL_VERIFYHOST, 2L); */
+  curl_easy_setopt(qvd->curl, CURLOPT_SSL_VERIFYPEER, 0L);
+  curl_easy_setopt(qvd->curl, CURLOPT_SSL_VERIFYHOST, 0L);
   curl_easy_setopt(qvd->curl, CURLOPT_CERTINFO, 1L);
   curl_easy_setopt(qvd->curl, CURLOPT_CAPATH, "/home/nito/.qvd/certs");
   curl_easy_setopt(qvd->curl, CURLOPT_SSL_CTX_FUNCTION, _qvd_sslctxfun);
@@ -127,6 +132,9 @@ qvdclient *qvd_init(const char *hostname, const int port, const char *username, 
   qvd->keyboard = "pc%2F105";
   qvd->fullscreen = 0;
   qvd->print_enabled = 0;
+  qvd->ssl_no_cert_check = 0;
+  qvd->ssl_verify_callback = NULL;
+
   *(qvd->display) = '\0';
   *(qvd->home) = '\0';
   strcpy(qvd->error_buffer, "");
@@ -297,6 +305,10 @@ void qvd_set_link(qvdclient *qvd, const char *link) {
   qvd->os[MAX_LINK - 1] = '\0';
 }
 
+void qvd_set_unknown_cert_callback(qvdclient *qvd, int (*ssl_verify_callback)(const char *cert_pem_str, const char *cert_pem_data))
+{
+  qvd->ssl_verify_callback = ssl_verify_callback;
+}
 
 /*
  * Internal funcs for qvd_init
@@ -322,7 +334,9 @@ int _qvd_set_base64_auth(qvdclient *qvd)
       result = 1;
     } else 
     {
+#ifdef TRACE
       qvd_printf("The conversion to base64 from <%s> is <%s>", qvd->userpwd, qvd->authdigest);
+#endif
       result = 0;
     }
   free(ptr);
@@ -582,51 +596,139 @@ void _qvd_print_environ()
 X509 *certificate[MAX_CERTS];
 long certificate_error[MAX_CERTS]; 
 
-static void _qvd_dumpcert(X509 *x)
+/* static void _qvd_dumpcert(X509 *x) */
+/* { */
+/*   BIO *bio_out = BIO_new(BIO_s_mem()); */
+/*   BUF_MEM *biomem; */
+
+/*   /\* this outputs the cert in this 64 column wide style with newlines and */
+/*      -----BEGIN CERTIFICATE----- texts and more *\/ */
+/*   PEM_write_bio_X509(bio_out, x); */
+
+/*   BIO_get_mem_ptr(bio_out, &biomem); */
+
+/*   qvd_printf("Cert:\n%s\n", biomem->data); */
+
+/*   /\*  push_certinfo_len(data, numcert, "Cert", biomem->data, biomem->length);*\/ */
+
+/*   BIO_free(bio_out); */
+
+/* } */
+
+
+/* void _qvd_print_certificate(X509 *cert) */
+/* { */
+/*   char s[256]; */
+/*   qvd_printf("Printing certificate info:\n"); */
+
+/*   qvd_printf(" version %li\n", X509_get_version(cert)); */
+/*   qvd_printf(" not before %s\n", X509_get_notBefore(cert)->data); */
+/*   qvd_printf(" not after %s\n", X509_get_notAfter(cert)->data); */
+/*   qvd_printf(" signature type %i\n", X509_get_signature_type(cert)); */
+/*   qvd_printf(" serial no %ld\n", */
+/*       ASN1_INTEGER_get(X509_get_serialNumber(cert))); */
+/*   X509_NAME_oneline(X509_get_issuer_name(cert), s, 256); */
+/*   qvd_printf(" issuer %s\n", s); */
+/*   X509_NAME_oneline(X509_get_subject_name(cert), s, 256); */
+/*   qvd_printf(" subject %s\n", s); */
+/*   qvd_printf(" cert type %i\n", */
+/*       X509_certificate_type(cert, X509_get_pubkey(cert))); */
+/*   qvd_printf(" subject hash %ul\n", */
+/*       X509_subject_name_hash(cert)); */
+/*   qvd_printf(" subject hash 0x%x (hex)\n", */
+/*       X509_subject_name_hash(cert)); */
+/*   _qvd_dumpcert(cert); */
+  
+/* }  */
+
+
+int _qvd_save_certificate(qvdclient *qvd, X509 *cert, int depth)
 {
+  char path[1024];
+  char *home = getenv("HOME");
+  struct stat fs_stat;
+  int result;
+  if (home == NULL)
+    {
+      qvd_error(qvd, "Error HOME environment var is not defined, cannot save to $HOME/.qvd/certs");
+      return 0;
+    }
+  snprintf(path, 1023, "%s/%s", home, ".qvd");
+  path[1023] = '\0';
+  result = stat(path, &fs_stat);
+  if (result == -1)
+    {
+      if (errno != ENOENT)
+	{
+	  qvd_error(qvd, "Error accessing directory $HOME/.qvd (%s), with error: %s\n", path, strerror(errno));
+	  return 0;
+	}
+      result = mkdir(path, 0);
+      if (result)
+	{
+	  qvd_error(qvd, "Error creating directory $HOME/.qvd (%s), with error: %s\n", path, strerror(errno));
+	  return 0;
+	}
+    }
+
+  /* Define .qvd/certs in qvdclient.h */
+  snprintf(path, 1023, "%s/%s", home, ".qvd/certs");
+  path[1023] = '\0';
+  result = stat(path, &fs_stat);
+  if (result == -1)
+    {
+      if (errno != ENOENT)
+	{
+	  qvd_error(qvd, "Error accessing directory $HOME/.qvd (%s), with error: %s\n", path, strerror(errno));
+	  return 0;
+	}
+      result = mkdir(path, 0);
+      if (result)
+	{
+	  qvd_error(qvd, "Error creating directory $HOME/.qvd (%s), with error: %s\n", path, strerror(errno));
+	  return 0;
+	}
+    }
+
+  int fd;
+  snprintf(path, 1023, "%s/%s/%lx.%d", home, ".qvd/certs", X509_subject_name_hash(cert), depth);
+  path[1023] = '\0';
+  /* TODO save certificate open + write*/
+  fd = open(path, O_CREAT|O_TRUNC|O_WRONLY, 0644);
+  if (fd == -1)
+    {
+      qvd_error(qvd, "Error creating file %s: %s", path, strerror(errno));
+      return 0;
+    }
+  /* TODO write pem data, reuse method for _qvd_dumpcert in several places*/ 
   BIO *bio_out = BIO_new(BIO_s_mem());
   BUF_MEM *biomem;
-
-  /* this outputs the cert in this 64 column wide style with newlines and
-     -----BEGIN CERTIFICATE----- texts and more */
-  PEM_write_bio_X509(bio_out, x);
-
+  PEM_write_bio_X509(bio_out, cert);
   BIO_get_mem_ptr(bio_out, &biomem);
-
-  qvd_printf("Cert:\n%s\n", biomem->data);
-
-  /*  push_certinfo_len(data, numcert, "Cert", biomem->data, biomem->length);*/
-
-  BIO_free(bio_out);
-
-}
-
-
-void _qvd_print_certificate(X509 *cert)
-{
-  char s[256];
-  qvd_printf("Printing certificate info:\n");
-
-  qvd_printf(" version %li\n", X509_get_version(cert));
-  qvd_printf(" not before %s\n", X509_get_notBefore(cert)->data);
-  qvd_printf(" not after %s\n", X509_get_notAfter(cert)->data);
-  qvd_printf(" signature type %i\n", X509_get_signature_type(cert));
-  qvd_printf(" serial no %li\n",
-      ASN1_INTEGER_get(X509_get_serialNumber(cert)));
-  X509_NAME_oneline(X509_get_issuer_name(cert), s, 256);
-  qvd_printf(" issuer %s\n", s);
-  X509_NAME_oneline(X509_get_subject_name(cert), s, 256);
-  qvd_printf(" subject %s\n", s);
-  qvd_printf(" cert type %i\n",
-      X509_certificate_type(cert, X509_get_pubkey(cert)));
-  qvd_printf(" subject hash %ul\n",
-      X509_subject_name_hash(cert));
-  qvd_printf(" subject hash 0x%x (hex)\n",
-      X509_subject_name_hash(cert));
-  _qvd_dumpcert(cert);
   
-} 
+  result = write(fd, biomem->data, strlen(biomem->data));
+  if (result == -1)
+    {
+      qvd_error(qvd, "Error writing file %s: %s", path, strerror(errno));
+      BIO_free(bio_out);
+      return 0;
+	}
+  if (result != strlen(biomem->data))
+    {
+      qvd_error(qvd, "Error writing file not enough bytes written in %s: %d vs %d", path, result, strlen(biomem->data));
+      BIO_free(bio_out);
+      return 0;
+    }
 
+  result = close(fd);
+  if (result == -1)
+    {
+	  qvd_error(qvd, "Error closing file %s: %s", path, strerror(errno));
+	  return 0;
+    }
+  qvd_printf("Successfully saved cert in %s\n", path);
+  return 1;
+}
 
 int _qvd_verify_cert_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)
 {
@@ -649,19 +751,44 @@ int _qvd_verify_cert_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)
   if (depth < MAX_CERTS && !certificate[depth]) {
     certificate[depth] = cert;
     certificate_error[depth] = err;
-    _qvd_print_certificate(certificate[depth]);
-    
+    /* _qvd_print_certificate(certificate[depth]); */    
     cert->references++;
   }
 
   /* See http://www.openssl.org/docs/ssl/SSL_CTX_set_verify.html# */
   if (preverify_ok)
     {
-      qvd_printf("_qvd_verify_cert_callback: Certificate was validated");
+      qvd_printf("_qvd_verify_cert_callback: Certificate was validated\n");
       return preverify_ok;
     }
+  if (qvd->ssl_verify_callback == NULL)
+    {
+      qvd_printf("_qvd_verify_cert_callback: No callback specified returning false (specify if you wissh callbacks for unknown certs with qvd_set_unknown_cert_callback)\n");
+      return 0;
+    }
 
-  return preverify_ok;
+  BIO *bio_out = BIO_new(BIO_s_mem());
+  BUF_MEM *biomem;
+  int result;
+  PEM_write_bio_X509(bio_out, certificate[depth]);
+  BIO_get_mem_ptr(bio_out, &biomem);
+  char cert_info[1024];
+  char issuer[256], subject[256];
+  X509_NAME_oneline(X509_get_issuer_name(certificate[depth]), issuer, 256);
+  X509_NAME_oneline(X509_get_subject_name(certificate[depth]), subject, 256);
+
+  snprintf(cert_info, 1023, "Serial: %lu\n\nIssuer: %s\n\nValidity:\n\tNot before: %s\n\tNot after: %s\n\nSubject: %s\n",
+	   ASN1_INTEGER_get(X509_get_serialNumber(certificate[depth])), issuer, 
+	   X509_get_notBefore(certificate[depth])->data, X509_get_notAfter(cert)->data, subject);
+  cert_info[1023] = '\0';
+  result = qvd->ssl_verify_callback(cert_info, biomem->data);
+  if (result)
+    {
+      _qvd_save_certificate(qvd, certificate[depth], depth);
+    }
+
+  BIO_free(bio_out);
+  return result;
 }
 
 CURLcode _qvd_sslctxfun(CURL *curl, SSL_CTX *sslctx, void *parm)
