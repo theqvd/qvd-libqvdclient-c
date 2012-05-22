@@ -87,7 +87,6 @@ typedef struct {
 } qvdclient;
 
 
-int launch_qvd(void);
 qvdclient *qvd_init(const char *hostname, const int port, const char *username, const char *password);
 vmlist *qvd_list_of_vm(qvdclient *qvd);
 int qvd_connect_to_vm(qvdclient *qvd, int id);
