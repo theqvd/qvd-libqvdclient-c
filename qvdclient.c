@@ -17,15 +17,16 @@ void help(const char *program)
   printf("  -f : Use fullscreen\n");
   printf("  -l : Use only list_of_vm (don't try to connect, useful for debugging)\n");
   printf("  -o : Assume One VM, that is connect always to the first VM (useful for debugging)\n");
+  printf("  -n : No strict certificate checking, always accept certificate\n");
 }
 
-int parse_params(int argc, char **argv, const char **host, int *port, const char **user, const char **pass, const char **geometry, int *fullscreen, int *only_list_of_vm, int *one_vm)
+int parse_params(int argc, char **argv, const char **host, int *port, const char **user, const char **pass, const char **geometry, int *fullscreen, int *only_list_of_vm, int *one_vm, int *no_cert_check)
 {
   int opt, error = 0;
   const char *program = argv[0];
   char *endptr;
 
-  while ((opt = getopt(argc, argv, "?dh:p:u:w:g:flo")) != -1 )
+  while ((opt = getopt(argc, argv, "?dh:p:u:w:g:flon")) != -1 )
     {
       switch (opt)
 	{
@@ -63,6 +64,9 @@ int parse_params(int argc, char **argv, const char **host, int *port, const char
 	case 'o':
 	  *one_vm = 1;
 	  break;
+	case 'n':
+	  *no_cert_check = 1;
+	  break;
 	default:
 	  fprintf(stderr, "Parameter not recognized <%c>\n", opt);
 	  error = 1;
@@ -98,7 +102,7 @@ int accept_unknown_cert_callback(const char *cert_pem_str, const char *cert_pem_
 {
   char answer[YES_NO_SIZE];
   int result;
-  printf("Unknown cert:\n%s\n\nDo you want to accept it?", cert_pem_str);
+  printf("Unknown cert:\n%s\n\nDo you want to accept it? ", cert_pem_str);
   scanf("%20s", answer);
   result = (strncmp(answer, "y", YES_NO_SIZE) == 0  || 
 	    strncmp(answer, "yes", YES_NO_SIZE) == 0  || 
@@ -118,8 +122,8 @@ int choose_vmid(vmlist *vm)
     {
       printf("List of vms:\n");
       for (ptr=vm; ptr != NULL; ptr = ptr->next)
-	printf("VM ID:%d NAME:%s STATE:%s BLOCKED:%d\n", 
-	       ptr->data->id, ptr->data->name, ptr->data->state, ptr->data->blocked);
+	  printf("VM ID:%d NAME:%s STATE:%s BLOCKED:%d\n", 
+		 ptr->data->id, ptr->data->name, ptr->data->state, ptr->data->blocked);
       printf("Choose vmid: ");
       scanf("%d", &vm_id);
       for (ptr=vm; ptr != NULL; ptr = ptr->next)
@@ -137,11 +141,14 @@ int choose_vmid(vmlist *vm)
 int main(int argc, char *argv[], char *envp[]) {
   qvdclient *qvd;
   const char *host = NULL, *user = NULL, *pass = NULL, *geometry = NULL;
-  int port = 8443, fullscreen=0, vm_id, only_list_of_vm=0, one_vm=0;
-  if (parse_params(argc, argv, &host, &port, &user, &pass, &geometry, &fullscreen, &only_list_of_vm, &one_vm))
+  int port = 8443, fullscreen=0, vm_id, only_list_of_vm=0, one_vm=0, no_cert_check=0;
+  if (parse_params(argc, argv, &host, &port, &user, &pass, &geometry, &fullscreen, &only_list_of_vm, &one_vm, &no_cert_check))
     return 1;
 
   qvd = qvd_init(host, port, user, pass);
+
+  if (no_cert_check)
+    qvd_set_no_cert_check(qvd);
 
   if (geometry)
     qvd_set_geometry(qvd, geometry);
@@ -150,13 +157,14 @@ int main(int argc, char *argv[], char *envp[]) {
 
   qvd_set_unknown_cert_callback(qvd, accept_unknown_cert_callback);
 
+  /* TODO check unknown password, currently it returns NULL */
   if (qvd_list_of_vm(qvd) == NULL)
     {
-      printf("Error fetching vm for user %s in host %s\n", user, host);
+      printf("Error fetching vm for user %s in host %s: %s\n", user, host, qvd->error_buffer);
       qvd_free(qvd);
       return 5;
     }
-  if (qvd->numvms < 0)
+  if (qvd->numvms <= 0)
     {
       printf("No vms found for user %s in host %s\n", user, host);
       qvd_free(qvd);
@@ -165,7 +173,6 @@ int main(int argc, char *argv[], char *envp[]) {
 
   if (one_vm || qvd->numvms == 1)
     {
-      /* TODO select VM, for now use the first one*/
       vm_id = qvd->vmlist->data->id;
       printf("Connecting to the first vm: vm_id %d\n", vm_id);
     }
@@ -175,7 +182,7 @@ int main(int argc, char *argv[], char *envp[]) {
     }
   if (vm_id < 0)
     {
-      printf("Error choosing vm_id: %d\n");
+      printf("Error choosing vm_id: %d\n", vm_id);
       return 6;
     }
   if (only_list_of_vm)

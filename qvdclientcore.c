@@ -20,11 +20,12 @@
 #include "qvdbuffer.h"
 #include "qvdvm.h"
 
-#ifdef STRICTSSL
 /* See http://www.openssl.org/docs/ssl/SSL_get_ex_new_index.html# */
-static int _qvd_ssl_index;
+#ifndef ANDROID
+extern char **environ;
 #endif
 
+static int _qvd_ssl_index;
 
 int _qvd_proxy_connect(qvdclient *qvd);
 int _qvd_client_loop(qvdclient *qvd, int connFd, int proxyFd);
@@ -36,10 +37,6 @@ CURLcode _qvd_sslctxfun(CURL *curl, SSL_CTX *sslctx, void *parm);
 int _qvd_set_base64_auth(qvdclient *qvd);
 int _qvd_switch_protocols(qvdclient *qvd, int id);
 void _qvd_print_environ();
-
-
-
-
 
 /* Init and free functions */
 qvdclient *qvd_init(const char *hostname, const int port, const char *username, const char *password) {
@@ -81,6 +78,11 @@ qvdclient *qvd_init(const char *hostname, const int port, const char *username, 
     return NULL;
   }
 
+  if (!_qvd_set_certdir(qvd)) {
+    free(qvd);
+    return NULL;
+  }
+
   qvd->curl = curl_easy_init();
   if (!qvd->curl) {
     qvd_error(qvd, "Error initializing curl\n");
@@ -89,29 +91,19 @@ qvdclient *qvd_init(const char *hostname, const int port, const char *username, 
   }
   if (get_debug_level()) 
     curl_easy_setopt(qvd->curl, CURLOPT_VERBOSE, 1L);
-  /* TODO fix ssl settings */
-  /* Set CURLOPT_SSL_VERIFYPEER to 1 (default) */
-  /* Set CURLOPT_SSL_VERIFYHOST to 2 (default, certificate issuer must match and match cn) */
-  /* Set CURLOPT_SSL_CAPATH to a location of the path with certificates */
-  /* Set CURLOPT_CERTINFO to 1 (be able to get certificate info with curl_easy_getinfo and CURLINFO_CERTINFO) */
-  /* Set up also a function in qvdclient.h to check for certificateerror if null was returned */
 
-#ifdef STRICTSSL
   /* curl_easy_setopt(qvd->curl, CURLOPT_SSL_VERIFYPEER, 1L); */
   /* curl_easy_setopt(qvd->curl, CURLOPT_SSL_VERIFYHOST, 2L); */
-  curl_easy_setopt(qvd->curl, CURLOPT_SSL_VERIFYPEER, 0L);
-  curl_easy_setopt(qvd->curl, CURLOPT_SSL_VERIFYHOST, 0L);
   curl_easy_setopt(qvd->curl, CURLOPT_CERTINFO, 1L);
-  curl_easy_setopt(qvd->curl, CURLOPT_CAPATH, "/home/nito/.qvd/certs");
+  curl_easy_setopt(qvd->curl, CURLOPT_CAPATH, qvd->certpath);
   curl_easy_setopt(qvd->curl, CURLOPT_SSL_CTX_FUNCTION, _qvd_sslctxfun);
   curl_easy_setopt(qvd->curl, CURLOPT_SSL_CTX_DATA, (void *)qvd);
   /*  curl_easy_setopt(qvd->curl, CURLOPT_CAINFO, NULL);*/
   _qvd_ssl_index = SSL_CTX_get_ex_new_index(0, (void *)qvd, NULL, NULL, NULL);
-#else
   curl_easy_setopt(qvd->curl, CURLOPT_SSL_VERIFYPEER, 0L);
   curl_easy_setopt(qvd->curl, CURLOPT_SSL_VERIFYHOST, 0L);
-#endif
   curl_easy_setopt(qvd->curl, CURLOPT_TCP_NODELAY, 1L);
+  /*  curl_easy_setopt(qvd->curl, CURLOPT_FAILONERROR, 1L);*/
   curl_easy_setopt(qvd->curl, CURLOPT_HTTPAUTH, (long)CURLAUTH_BASIC);
   curl_easy_setopt(qvd->curl, CURLOPT_USERPWD, qvd->userpwd);
   curl_easy_setopt(qvd->curl, CURLOPT_WRITEFUNCTION, _qvd_write_buffer_callback);
@@ -158,6 +150,7 @@ void qvd_free(qvdclient *qvd) {
 vmlist *qvd_list_of_vm(qvdclient *qvd) {
   char url[MAX_BASEURL];
   int i;
+  long http_code = 0;
   json_error_t error;
   char *command = "/qvd/list_of_vm";
 
@@ -169,22 +162,25 @@ vmlist *qvd_list_of_vm(qvdclient *qvd) {
   curl_easy_setopt(qvd->curl, CURLOPT_URL, url);
   /*  curl_easy_setopt(curl, CURLOPT_WRITEDATA, &jsonBuffer); */
   qvd->res = curl_easy_perform(qvd->curl);
-  if (qvd->res) {
-
-#ifdef STRICTSSL
-    qvd_printf("STRICTSSL is defined\n");
-#endif
-
-    /*    qvd_error(qvd, "An error ocurred getting url <%s>: %d <%s>\n", url, qvd->res, curl_easy_strerror(qvd->res));*/
-    qvd_error(qvd, "An error ocurred getting url <%s>: %d\n", url, qvd->res);
-    /*    qvd_printf("An error ocurred getting url <%s>: %d\n", url, qvd->res);*/
-    struct curl_certinfo certinfo;
-    curl_easy_getinfo(qvd->curl, CURLINFO_CERTINFO, &certinfo);
-    qvd_printf("Something\n");
-    qvd_printf("Number of certs: %d\n", certinfo.num_of_certs);
-    return NULL;
-  }
-
+  if (qvd->res)
+    {
+      /*    qvd_error(qvd, "An error ocurred getting url <%s>: %d <%s>\n", url, qvd->res, curl_easy_strerror(qvd->res));*/
+      qvd_error(qvd, "An error ocurred getting url <%s>: %d\n", url, qvd->res);
+      /*    qvd_printf("An error ocurred getting url <%s>: %d\n", url, qvd->res);*/
+      struct curl_certinfo certinfo;
+      curl_easy_getinfo(qvd->curl, CURLINFO_CERTINFO, &certinfo);
+      qvd_printf("Something\n");
+      qvd_printf("Number of certs: %d\n", certinfo.num_of_certs);
+      return NULL;
+    }
+  
+  curl_easy_getinfo (qvd->curl, CURLINFO_RESPONSE_CODE, &http_code);
+  if (http_code == 401)
+    {
+      qvd_error(qvd, "Error authenticating user\n");
+      return NULL;
+    }
+  
   /*  QvdBufferInit(&(qvd->buffer)); */
 
   json_t *vmList = json_loads(qvd->buffer.data, 0, &error);
@@ -214,7 +210,7 @@ vmlist *qvd_list_of_vm(qvdclient *qvd) {
   }
   /*  QvdBufferReset(&(qvd->buffer));*/
   if (qvd->numvms <= 0) {
-    qvd_error(qvd, "No virtual machines available for user %s", qvd->username);
+    qvd_error(qvd, "No virtual machines available for user %s\n", qvd->username);
   }
 
   return qvd->vmlist;
@@ -238,7 +234,6 @@ int qvd_connect_to_vm(qvdclient *qvd, int id)
       qvd_error(qvd, "Error setting NX_HOME to %s. errno: %d (%s)", qvd->home, errno, strerror(errno));
     }
   }
-
 
   result = _qvd_switch_protocols(qvd, id);
   _qvd_print_environ();
@@ -305,6 +300,14 @@ void qvd_set_link(qvdclient *qvd, const char *link) {
   qvd->os[MAX_LINK - 1] = '\0';
 }
 
+void qvd_set_no_cert_check(qvdclient *qvd) {
+  qvd->ssl_no_cert_check = 1;
+}
+void qvd_set_strict_cert_check(qvdclient *qvd) {
+  qvd->ssl_no_cert_check = 0;
+}
+
+
 void qvd_set_unknown_cert_callback(qvdclient *qvd, int (*ssl_verify_callback)(const char *cert_pem_str, const char *cert_pem_data))
 {
   qvd->ssl_verify_callback = ssl_verify_callback;
@@ -313,6 +316,42 @@ void qvd_set_unknown_cert_callback(qvdclient *qvd, int (*ssl_verify_callback)(co
 /*
  * Internal funcs for qvd_init
  */
+
+int _qvd_set_certdir(qvdclient *qvd)
+{
+  char *home = getenv(HOME_ENV);
+  char *appdata = getenv(APPDATA_ENV);
+  int result;
+  if (home == NULL && appdata == NULL)
+    {
+      qvd_error(qvd, "Error %s and %s environment var were not defined, cannot save to $HOME/.qvd/certs", HOME_ENV, APPDATA_ENV);
+      return 0;
+    }
+
+  if (home == NULL)
+    {
+      home = appdata;
+      qvd_printf("%s was not defined using %s environment var", HOME_ENV, APPDATA_ENV);
+    }
+    
+
+  /* Define .qvd/certs in qvdclient.h */
+  if (!_qvd_create_dir(qvd, home, CONF_DIR))
+    return 0;
+
+  if (!_qvd_create_dir(qvd, home, CERT_DIR))
+    return 0;
+
+  snprintf(qvd->certpath, MAXCERTSTRING, "%s/%s", home, CERT_DIR);
+  qvd->certpath[MAXCERTSTRING] = '\0';
+  if (strlen(qvd->certpath) == MAXCERTSTRING)
+    {
+      qvd_error(qvd, "Cert string too long (%d) recompile program. Path is %s", MAXCERTSTRING, qvd->certpath);
+      return 0;
+    }
+  return 1;
+}
+
 int _qvd_set_base64_auth(qvdclient *qvd)
 {
   CURLcode error;
@@ -439,7 +478,7 @@ int _qvd_client_loop(qvdclient *qvd, int connFd, int proxyFd)
 #ifdef TRACE
 		qvd_printf("curl: recv'd %ld\n", read);
 #endif
-		/* TODO if cul recvd is 0 then end */
+		/* TODO if curl recvd is 0 then end */
 		proxyWrite.size += read;
 		if (read == 0)
 		  {
@@ -526,7 +565,7 @@ int _qvd_switch_protocols(qvdclient *qvd, int id)
   curl_easy_setopt(qvd->curl, CURLOPT_CONNECT_ONLY, 1L);
   curl_easy_perform(qvd->curl);
   curl_easy_getinfo(qvd->curl, CURLINFO_LASTSOCKET, &socket);
-
+  /* TODO check for auth info again */
 
   /*  if (snprintf(url, MAX_BASEURL, "GET /qvd/connect_to_vm?id=%d&qvd.client.os=%s&qvd.client.fullscreen=%d&qvd.client.geometry=%s&qvd.client.link=%s&qvd.client.keyboard=%s&qvd.client.printing.enabled=%d HTTP/1.1\nAuthorization: Basic %s\nConnection: Upgrade\nUpgrade: QVD/1.0\n\n", id, qvd->os, qvd->fullscreen, qvd->geometry, qvd->link, qvd->keyboard, qvd->print_enabled, qvd->authdigest) >= MAX_BASEURL) { */
   if (snprintf(url, MAX_BASEURL, "GET /qvd/connect_to_vm?id=%d&qvd.client.os=%s&qvd.client.geometry=%s&qvd.client.link=%s&qvd.client.keyboard=%s&qvd.client.fullscreen=%d HTTP/1.1\nAuthorization: Basic %s\nConnection: Upgrade\nUpgrade: QVD/1.0\n\n", id, qvd->os, qvd->geometry, qvd->link, qvd->keyboard, qvd->fullscreen, qvd->authdigest) >= MAX_BASEURL) {
@@ -554,7 +593,7 @@ int _qvd_switch_protocols(qvdclient *qvd, int id)
       return 2;
     }
     qvd->buffer.data[bytes_sent] = 0;
-    qvd_printf(qvd, "%d input received was <%s>\n", i, qvd->buffer.data);
+    qvd_printf("%d input received was <%s>\n", i, qvd->buffer.data);
     if (strstr(qvd->buffer.data, "HTTP/1.1 101")) {
       qvd_printf("Upgrade of protocol was done\n");
       break;
@@ -567,10 +606,6 @@ int _qvd_switch_protocols(qvdclient *qvd, int id)
 
   return 0;
 }
-
-#ifndef ANDROID
-extern char **environ;
-#endif
 
 void _qvd_print_environ()
 {
@@ -589,134 +624,71 @@ void _qvd_print_environ()
  * Really generic
  */
 
-#ifdef STRICTSSL
 
 /* arrays for certificate chain and errors */
 #define MAX_CERTS 20
 X509 *certificate[MAX_CERTS];
 long certificate_error[MAX_CERTS]; 
 
-/* static void _qvd_dumpcert(X509 *x) */
-/* { */
-/*   BIO *bio_out = BIO_new(BIO_s_mem()); */
-/*   BUF_MEM *biomem; */
-
-/*   /\* this outputs the cert in this 64 column wide style with newlines and */
-/*      -----BEGIN CERTIFICATE----- texts and more *\/ */
-/*   PEM_write_bio_X509(bio_out, x); */
-
-/*   BIO_get_mem_ptr(bio_out, &biomem); */
-
-/*   qvd_printf("Cert:\n%s\n", biomem->data); */
-
-/*   /\*  push_certinfo_len(data, numcert, "Cert", biomem->data, biomem->length);*\/ */
-
-/*   BIO_free(bio_out); */
-
-/* } */
-
-
-/* void _qvd_print_certificate(X509 *cert) */
-/* { */
-/*   char s[256]; */
-/*   qvd_printf("Printing certificate info:\n"); */
-
-/*   qvd_printf(" version %li\n", X509_get_version(cert)); */
-/*   qvd_printf(" not before %s\n", X509_get_notBefore(cert)->data); */
-/*   qvd_printf(" not after %s\n", X509_get_notAfter(cert)->data); */
-/*   qvd_printf(" signature type %i\n", X509_get_signature_type(cert)); */
-/*   qvd_printf(" serial no %ld\n", */
-/*       ASN1_INTEGER_get(X509_get_serialNumber(cert))); */
-/*   X509_NAME_oneline(X509_get_issuer_name(cert), s, 256); */
-/*   qvd_printf(" issuer %s\n", s); */
-/*   X509_NAME_oneline(X509_get_subject_name(cert), s, 256); */
-/*   qvd_printf(" subject %s\n", s); */
-/*   qvd_printf(" cert type %i\n", */
-/*       X509_certificate_type(cert, X509_get_pubkey(cert))); */
-/*   qvd_printf(" subject hash %ul\n", */
-/*       X509_subject_name_hash(cert)); */
-/*   qvd_printf(" subject hash 0x%x (hex)\n", */
-/*       X509_subject_name_hash(cert)); */
-/*   _qvd_dumpcert(cert); */
-  
-/* }  */
-
-
-int _qvd_save_certificate(qvdclient *qvd, X509 *cert, int depth)
+int _qvd_create_dir(qvdclient *qvd, const char *home, const char *subdir)
 {
-  char path[1024];
-  char *home = getenv("HOME");
+  char path[MAXCERTSTRING];
   struct stat fs_stat;
   int result;
-  if (home == NULL)
+  snprintf(path, MAXCERTSTRING - 1, "%s/%s", home, subdir);
+  path[MAXCERTSTRING - 1] = '\0';
+  result = stat(path, &fs_stat);
+  if (result == -1)
     {
-      qvd_error(qvd, "Error HOME environment var is not defined, cannot save to $HOME/.qvd/certs");
+      if (errno != ENOENT)
+	{
+	  qvd_error(qvd, "Error accessing directory $HOME/%s (%s), with error: %s\n", subdir, path, strerror(errno));
+	  return 0;
+	}
+      result = mkdir(path, 0);
+      if (result)
+	{
+	  qvd_error(qvd, "Error creating directory $HOME/%s (%s), with error: %s\n", subdir, path, strerror(errno));
+	  return 0;
+	}
+      return 1;
+    }
+  if (!S_ISDIR(fs_stat.st_mode))
+    {
+      qvd_error("Error accessing dir $HOME/%s (%s) the file is not a directory", subdir, path);
       return 0;
     }
-  snprintf(path, 1023, "%s/%s", home, ".qvd");
-  path[1023] = '\0';
-  result = stat(path, &fs_stat);
-  if (result == -1)
+  return 1;
+}
+int _qvd_save_certificate(qvdclient *qvd, X509 *cert, int depth, BUF_MEM *biomem)
+{
+  char path[MAXCERTSTRING];
+
+  int fd, result;
+  snprintf(path, MAXCERTSTRING - 1, "%s/%lx.%d", qvd->certpath, X509_subject_name_hash(cert), depth);
+  path[MAXCERTSTRING - 1] = '\0';
+  if (strlen(path) == MAXCERTSTRING)
     {
-      if (errno != ENOENT)
-	{
-	  qvd_error(qvd, "Error accessing directory $HOME/.qvd (%s), with error: %s\n", path, strerror(errno));
-	  return 0;
-	}
-      result = mkdir(path, 0);
-      if (result)
-	{
-	  qvd_error(qvd, "Error creating directory $HOME/.qvd (%s), with error: %s\n", path, strerror(errno));
-	  return 0;
-	}
+      qvd_error(qvd, "Cert string too long (%d) recompile program. Path is %s", MAXCERTSTRING, path);
+      return 0;
     }
 
-  /* Define .qvd/certs in qvdclient.h */
-  snprintf(path, 1023, "%s/%s", home, ".qvd/certs");
-  path[1023] = '\0';
-  result = stat(path, &fs_stat);
-  if (result == -1)
-    {
-      if (errno != ENOENT)
-	{
-	  qvd_error(qvd, "Error accessing directory $HOME/.qvd (%s), with error: %s\n", path, strerror(errno));
-	  return 0;
-	}
-      result = mkdir(path, 0);
-      if (result)
-	{
-	  qvd_error(qvd, "Error creating directory $HOME/.qvd (%s), with error: %s\n", path, strerror(errno));
-	  return 0;
-	}
-    }
-
-  int fd;
-  snprintf(path, 1023, "%s/%s/%lx.%d", home, ".qvd/certs", X509_subject_name_hash(cert), depth);
-  path[1023] = '\0';
-  /* TODO save certificate open + write*/
   fd = open(path, O_CREAT|O_TRUNC|O_WRONLY, 0644);
   if (fd == -1)
     {
       qvd_error(qvd, "Error creating file %s: %s", path, strerror(errno));
       return 0;
     }
-  /* TODO write pem data, reuse method for _qvd_dumpcert in several places*/ 
-  BIO *bio_out = BIO_new(BIO_s_mem());
-  BUF_MEM *biomem;
-  PEM_write_bio_X509(bio_out, cert);
-  BIO_get_mem_ptr(bio_out, &biomem);
-  
+
   result = write(fd, biomem->data, strlen(biomem->data));
   if (result == -1)
     {
       qvd_error(qvd, "Error writing file %s: %s", path, strerror(errno));
-      BIO_free(bio_out);
       return 0;
 	}
   if (result != strlen(biomem->data))
     {
       qvd_error(qvd, "Error writing file not enough bytes written in %s: %d vs %d", path, result, strlen(biomem->data));
-      BIO_free(bio_out);
       return 0;
     }
 
@@ -740,7 +712,6 @@ int _qvd_verify_cert_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)
   ssl = X509_STORE_CTX_get_ex_data(x509_ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
   sslctx = SSL_get_SSL_CTX(ssl);
   qvd = SSL_CTX_get_ex_data(sslctx, _qvd_ssl_index); 
-  /*  qvd_printf("The qvd parameter received in _qvd_verify_cert_callback has user: %s\n", qvd->username);*/
  
   X509 *cert = X509_STORE_CTX_get_current_cert(x509_ctx);
   int depth = X509_STORE_CTX_get_error_depth(x509_ctx);
@@ -751,7 +722,6 @@ int _qvd_verify_cert_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)
   if (depth < MAX_CERTS && !certificate[depth]) {
     certificate[depth] = cert;
     certificate_error[depth] = err;
-    /* _qvd_print_certificate(certificate[depth]); */    
     cert->references++;
   }
 
@@ -784,7 +754,7 @@ int _qvd_verify_cert_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)
   result = qvd->ssl_verify_callback(cert_info, biomem->data);
   if (result)
     {
-      _qvd_save_certificate(qvd, certificate[depth], depth);
+      _qvd_save_certificate(qvd, certificate[depth], depth, biomem);
     }
 
   BIO_free(bio_out);
@@ -793,20 +763,20 @@ int _qvd_verify_cert_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)
 
 CURLcode _qvd_sslctxfun(CURL *curl, SSL_CTX *sslctx, void *parm)
 {
+
   qvdclient *qvd = (qvdclient *) parm;
-  /*qvd_printf("The qvd parameter received in sslctxfun has user: %s\n", qvd->username);*/
-  /* TODO Call SSL_set_ex_data and http://www.openssl.org/docs/ssl/SSL_get_ex_new_index.htm*/
+  if (qvd->ssl_no_cert_check)
+    {
+      qvd_printf("No strict certificate checking. Accepting any server certificate\n");
+      return CURLE_OK;
+    }
+  /* See SSL_set_ex_data and http://www.openssl.org/docs/ssl/SSL_get_ex_new_index.htm*/
   /* parm is qvdclient *qvd, the qvd object, set with  CURLOPT_SSL_CTX_DATA */
-  /* TODO get SSL * from SSL_CTX * */
-  /*  SSL_set_ex_data(SSL *ssl, _qvd_ssl_index, parm);  */
-  /*  or SSL_CTX_set_ex_data */
   SSL_CTX_set_ex_data(sslctx, _qvd_ssl_index, parm);
 
   SSL_CTX_set_verify(sslctx, SSL_VERIFY_PEER, _qvd_verify_cert_callback);
 
   return CURLE_OK;
 } 
-
-#endif
 
 

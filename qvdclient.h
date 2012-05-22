@@ -32,8 +32,11 @@
 #define DEFAULT_GEOMETRY "800x600"
 #define MAX_LINK 128
 #define DEFAULT_LINK "adsl"
-
-#define STRICTSSL 1
+#define MAXCERTSTRING 256
+#define HOME_ENV "HOME"
+#define APPDATA_ENV "APPDATA"
+#define CONF_DIR ".qvd"
+#define CERT_DIR ".qvd/certs"
 
 
 /* the buffer size is 32K */
@@ -77,13 +80,10 @@ typedef struct {
   int fullscreen;
   char display[MAXDISPLAYSTRING];
   char home[MAXHOMESTRING];
+  char certpath[MAXCERTSTRING];
   char useragent[MAX_USERAGENT];
-#ifdef STRICTSSL
   int ssl_no_cert_check;
   int (*ssl_verify_callback)(const char *cert_pem_str, const char *cert_pem_data);
-  /* TODO define function pointer for callback */
-  /* TODO define strictssl = 0, by default always 1 */
-#endif
 } qvdclient;
 
 
@@ -102,6 +102,8 @@ void qvd_set_useragent(qvdclient *qvd, const char *useragent);
 void qvd_set_os(qvdclient *qvd, const char *os);
 void qvd_set_geometry(qvdclient *qvd, const char *geometry);
 void qvd_set_link(qvdclient *qvd, const char *link);
+void qvd_set_no_cert_check(qvdclient *qvd);
+void qvd_set_strict_cert_check(qvdclient *qvd);
 void qvd_set_unknown_cert_callback(qvdclient *qvd, int (*ssl_verify_callback)(const char *cert_pem_str, const char *cert_pem_data));
 char *qvd_get_last_error(qvdclient *qvd);
 #endif
