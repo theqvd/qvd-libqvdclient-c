@@ -58,7 +58,7 @@ struct vmliststruct {
 
 typedef struct vmliststruct vmlist;
 
-typedef struct {
+struct qvdclientstruct {
   CURL *curl;
   CURLcode res;
   char error_buffer[MAX_ERROR_BUFFER];
@@ -83,9 +83,9 @@ typedef struct {
   char certpath[MAXCERTSTRING];
   char useragent[MAX_USERAGENT];
   int ssl_no_cert_check;
-  int (*ssl_verify_callback)(const char *cert_pem_str, const char *cert_pem_data);
-} qvdclient;
-
+  int (*ssl_verify_callback)(struct qvdclientstruct *qvd, const char *cert_pem_str, const char *cert_pem_data);
+} ;
+typedef struct qvdclientstruct qvdclient;
 
 qvdclient *qvd_init(const char *hostname, const int port, const char *username, const char *password);
 vmlist *qvd_list_of_vm(qvdclient *qvd);
@@ -103,6 +103,6 @@ void qvd_set_geometry(qvdclient *qvd, const char *geometry);
 void qvd_set_link(qvdclient *qvd, const char *link);
 void qvd_set_no_cert_check(qvdclient *qvd);
 void qvd_set_strict_cert_check(qvdclient *qvd);
-void qvd_set_unknown_cert_callback(qvdclient *qvd, int (*ssl_verify_callback)(const char *cert_pem_str, const char *cert_pem_data));
+void qvd_set_unknown_cert_callback(qvdclient *qvd, int (*ssl_verify_callback)(qvdclient *, const char *cert_pem_str, const char *cert_pem_data));
 char *qvd_get_last_error(qvdclient *qvd);
 #endif

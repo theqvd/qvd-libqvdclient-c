@@ -34,7 +34,7 @@ int parse_params(int argc, char **argv, const char **host, int *port, const char
 	  help(program);
 	  break;
 	case 'd':
-	  set_debug_level(2);
+	  qvd_set_debug(2);
 	  break;
 	case 'h':
 	  *host = optarg;
@@ -98,7 +98,7 @@ int parse_params(int argc, char **argv, const char **host, int *port, const char
 }
 
 #define YES_NO_SIZE 20
-int accept_unknown_cert_callback(const char *cert_pem_str, const char *cert_pem_data)
+int accept_unknown_cert_callback(qvdclient *qvd, const char *cert_pem_str, const char *cert_pem_data)
 {
   char answer[YES_NO_SIZE];
   int result;
@@ -136,6 +136,10 @@ int choose_vmid(vmlist *vm)
       printf("VM id not found. Please try again\n");
       vm_id = -1;
     }
+}
+
+char *qvd_get_last_error(qvdclient *qvd) {
+  return qvd->error_buffer;
 }
 
 int main(int argc, char *argv[], char *envp[]) {

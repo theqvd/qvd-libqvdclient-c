@@ -162,6 +162,7 @@ vmlist *qvd_list_of_vm(qvdclient *qvd) {
   curl_easy_setopt(qvd->curl, CURLOPT_URL, url);
   /*  curl_easy_setopt(curl, CURLOPT_WRITEDATA, &jsonBuffer); */
   qvd->res = curl_easy_perform(qvd->curl);
+  qvd_printf("After easy_perform");
   if (qvd->res)
     {
       /*    qvd_error(qvd, "An error ocurred getting url <%s>: %d <%s>\n", url, qvd->res, curl_easy_strerror(qvd->res));*/
@@ -308,7 +309,7 @@ void qvd_set_strict_cert_check(qvdclient *qvd) {
 }
 
 
-void qvd_set_unknown_cert_callback(qvdclient *qvd, int (*ssl_verify_callback)(const char *cert_pem_str, const char *cert_pem_data))
+void qvd_set_unknown_cert_callback(qvdclient *qvd, int (*ssl_verify_callback)(qvdclient *qvd, const char *cert_pem_str, const char *cert_pem_data))
 {
   qvd->ssl_verify_callback = ssl_verify_callback;
 }
@@ -645,7 +646,7 @@ int _qvd_create_dir(qvdclient *qvd, const char *home, const char *subdir)
 	  qvd_error(qvd, "Error accessing directory $HOME/%s (%s), with error: %s\n", subdir, path, strerror(errno));
 	  return 0;
 	}
-      result = mkdir(path, 0);
+      result = mkdir(path, 0755);
       if (result)
 	{
 	  qvd_error(qvd, "Error creating directory $HOME/%s (%s), with error: %s\n", subdir, path, strerror(errno));
@@ -751,7 +752,7 @@ int _qvd_verify_cert_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)
 	   ASN1_INTEGER_get(X509_get_serialNumber(certificate[depth])), issuer, 
 	   X509_get_notBefore(certificate[depth])->data, X509_get_notAfter(cert)->data, subject);
   cert_info[1023] = '\0';
-  result = qvd->ssl_verify_callback(cert_info, biomem->data);
+  result = qvd->ssl_verify_callback(qvd, cert_info, biomem->data);
   if (result)
     {
       _qvd_save_certificate(qvd, certificate[depth], depth, biomem);
