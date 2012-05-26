@@ -126,6 +126,7 @@ qvdclient *qvd_init(const char *hostname, const int port, const char *username, 
   qvd->print_enabled = 0;
   qvd->ssl_no_cert_check = 0;
   qvd->ssl_verify_callback = NULL;
+  qvd->userdata = NULL;
 
   *(qvd->display) = '\0';
   *(qvd->home) = '\0';
@@ -137,7 +138,7 @@ qvdclient *qvd_init(const char *hostname, const int port, const char *username, 
     return NULL;
   }
   QvdVmListInit(qvd->vmlist);
-
+  
   return qvd;
 }
 
@@ -566,7 +567,6 @@ int _qvd_switch_protocols(qvdclient *qvd, int id)
   curl_easy_setopt(qvd->curl, CURLOPT_CONNECT_ONLY, 1L);
   curl_easy_perform(qvd->curl);
   curl_easy_getinfo(qvd->curl, CURLINFO_LASTSOCKET, &socket);
-  /* TODO check for auth info again */
 
   /*  if (snprintf(url, MAX_BASEURL, "GET /qvd/connect_to_vm?id=%d&qvd.client.os=%s&qvd.client.fullscreen=%d&qvd.client.geometry=%s&qvd.client.link=%s&qvd.client.keyboard=%s&qvd.client.printing.enabled=%d HTTP/1.1\nAuthorization: Basic %s\nConnection: Upgrade\nUpgrade: QVD/1.0\n\n", id, qvd->os, qvd->fullscreen, qvd->geometry, qvd->link, qvd->keyboard, qvd->print_enabled, qvd->authdigest) >= MAX_BASEURL) { */
   if (snprintf(url, MAX_BASEURL, "GET /qvd/connect_to_vm?id=%d&qvd.client.os=%s&qvd.client.geometry=%s&qvd.client.link=%s&qvd.client.keyboard=%s&qvd.client.fullscreen=%d HTTP/1.1\nAuthorization: Basic %s\nConnection: Upgrade\nUpgrade: QVD/1.0\n\n", id, qvd->os, qvd->geometry, qvd->link, qvd->keyboard, qvd->fullscreen, qvd->authdigest) >= MAX_BASEURL) {

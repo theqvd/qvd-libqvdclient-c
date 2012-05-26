@@ -84,6 +84,8 @@ struct qvdclientstruct {
   char useragent[MAX_USERAGENT];
   int ssl_no_cert_check;
   int (*ssl_verify_callback)(struct qvdclientstruct *qvd, const char *cert_pem_str, const char *cert_pem_data);
+  /* You can use userdata for the ssl_verify_callback for example */
+  void *userdata;
 } ;
 typedef struct qvdclientstruct qvdclient;
 
