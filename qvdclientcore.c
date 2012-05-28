@@ -127,6 +127,7 @@ qvdclient *qvd_init(const char *hostname, const int port, const char *username, 
   qvd->ssl_no_cert_check = 0;
   qvd->ssl_verify_callback = NULL;
   qvd->userdata = NULL;
+  qvd->nx_options = NULL;
 
   *(qvd->display) = '\0';
   *(qvd->home) = '\0';
@@ -145,6 +146,8 @@ qvdclient *qvd_init(const char *hostname, const int port, const char *username, 
 void qvd_free(qvdclient *qvd) {
   curl_easy_cleanup(qvd->curl);
   QvdVmListFree(qvd->vmlist);
+  /* nx_options should be null */
+  free(qvd->nx_options);
   free(qvd);
 }
 
@@ -163,16 +166,16 @@ vmlist *qvd_list_of_vm(qvdclient *qvd) {
   curl_easy_setopt(qvd->curl, CURLOPT_URL, url);
   /*  curl_easy_setopt(curl, CURLOPT_WRITEDATA, &jsonBuffer); */
   qvd->res = curl_easy_perform(qvd->curl);
-  qvd_printf("After easy_perform");
+  qvd_printf("After easy_perform: %ul\n", qvd->res);
   if (qvd->res)
     {
       /*    qvd_error(qvd, "An error ocurred getting url <%s>: %d <%s>\n", url, qvd->res, curl_easy_strerror(qvd->res));*/
-      qvd_error(qvd, "An error ocurred getting url <%s>: %d\n", url, qvd->res);
+      /* qvd_error(qvd, "An error ocurred getting url <%s>\n", url); */
+      qvd_error(qvd, "An error ocurred getting url <%s>: %ul (%s)\n", url, qvd->res, curl_easy_strerror(qvd->res)); 
       /*    qvd_printf("An error ocurred getting url <%s>: %d\n", url, qvd->res);*/
-      struct curl_certinfo certinfo;
-      curl_easy_getinfo(qvd->curl, CURLINFO_CERTINFO, &certinfo);
-      qvd_printf("Something\n");
-      qvd_printf("Number of certs: %d\n", certinfo.num_of_certs);
+      /* struct curl_certinfo certinfo; */
+      /* curl_easy_getinfo(qvd->curl, CURLINFO_CERTINFO, &certinfo); */
+      /* qvd_printf("Number of certs: %d\n", certinfo.num_of_certs);*\/ */
       return NULL;
     }
   
@@ -182,7 +185,7 @@ vmlist *qvd_list_of_vm(qvdclient *qvd) {
       qvd_error(qvd, "Error authenticating user\n");
       return NULL;
     }
-  
+  qvd_printf("No error and no auth error after curl_easy_perform\n");
   /*  QvdBufferInit(&(qvd->buffer)); */
 
   json_t *vmList = json_loads(qvd->buffer.data, 0, &error);
@@ -315,6 +318,14 @@ void qvd_set_unknown_cert_callback(qvdclient *qvd, int (*ssl_verify_callback)(qv
   qvd->ssl_verify_callback = ssl_verify_callback;
 }
 
+void qvd_set_nx_options(qvdclient *qvd, const char *nx_options) {
+  /*  MAX_NX_OPTS_BUFFER */
+  /* Should be null in case it was never defined */
+  free(qvd->nx_options);
+  qvd->nx_options = malloc(strlen(nx_options) + 1);
+  strcpy(qvd->nx_options, nx_options);
+}
+
 /*
  * Internal funcs for qvd_init
  */
@@ -399,7 +410,7 @@ int _qvd_proxy_connect(qvdclient *qvd)
       return -1;
     }
   /*  if (NXTransCreate(proxyPair[0], NX_MODE_SERVER, "nx/nx,data=0,delta=0,cache=16384,pack=0:0") < 0)*/
-    if (NXTransCreate(proxyPair[0], NX_MODE_SERVER, NULL) < 0)
+  if (NXTransCreate(proxyPair[0], NX_MODE_SERVER, qvd->nx_options) < 0)
     {
       qvd_error(qvd, "Error creating proxy transport <%s>\n", strerror(errno));
       return -1;
@@ -491,6 +502,9 @@ int _qvd_client_loop(qvdclient *qvd, int connFd, int proxyFd)
 	      case CURLE_AGAIN:
 		qvd_printf("Nothing read. receiving curl_easy_recv: %d CURLE_AGAIN, read %d\n", res, read);
 		break;
+	      case CURLE_UNSUPPORTED_PROTOCOL:
+		qvd_printf("Unsupported protocol. receiving curl_easy_recv: %d CURLE_AGAIN (wait for next iteration), read %d\n", res, read);
+		break;
 	      default:
 		qvd_error(qvd, "Error receiving curl_easy_recv: %d\n", res);
 		connFd = -1;
@@ -518,20 +532,26 @@ int _qvd_client_loop(qvdclient *qvd, int connFd, int proxyFd)
 	    int res;
 	    res = curl_easy_send(qvd->curl, proxyRead.data+proxyRead.offset,
 				 proxyRead.size-proxyRead.offset, &written);
-	    if (res != CURLE_OK)
+	    switch (res)
 	      {
-		qvd_error(qvd, "Error sending curl_easy_send: %d", res);
-		connFd = -1;
-	      }
-	    else
-	      {
+	      case CURLE_OK:
 		proxyRead.offset += written;
 #ifdef TRACE
 		qvd_printf("curl: send'd %ld\n", written);
 #endif
-		if (proxyRead.offset >= proxyRead.size) {
+		if (proxyRead.offset >= proxyRead.size)
 		  QvdBufferReset(&proxyRead);
-		}
+		break;
+	      case CURLE_AGAIN:
+		/* TODO create loop to write different data */ 
+		qvd_printf("Nothing written, wait for next iteration. curl_easy_send: %d CURLE_AGAIN, written %d\n", res, written);
+		break;
+	      case CURLE_UNSUPPORTED_PROTOCOL:
+		qvd_printf("Unsupported protocol. receiving curl_easy_recv: %d CURLE_AGAIN (wait for next iteration), written %d\n", res, written);
+		break;
+	      default:
+		qvd_error(qvd, "Error sending curl_easy_send: %d", res);
+		connFd = -1;
 	      }
 	  }
 	if (proxyFd > 0 && QvdBufferCanWrite(&proxyWrite))
@@ -577,7 +597,7 @@ int _qvd_switch_protocols(qvdclient *qvd, int id)
 
   /*  char *url = "GET /qvd/connect_to_vm?id=1&qvd.client.os=linux&qvd.client.fullscreen=&qvd.client.geometry=800x600&qvd.client.link=local&qvd.client.keyboard=pc105%2Fus&qvd.client.printing.enabled=0 HTTP/1.1\nAuthorization: Basic bml0bzpuaXRv\nConnection: Upgrade\nUpgrade: QVD/1.0\n\n"; */
   if ((qvd->res = curl_easy_send(qvd->curl, url, strlen(url) , &bytes_sent )) != CURLE_OK ) {
-    qvd_error(qvd, "An error ocurred in first curl_easy_send: %d <%s>\n", qvd->res, curl_easy_strerror(qvd->res));
+    qvd_error(qvd, "An error ocurred in first curl_easy_send: %ul <%s>\n", qvd->res, curl_easy_strerror(qvd->res));
     return 1;
   }
 
@@ -590,7 +610,7 @@ int _qvd_switch_protocols(qvdclient *qvd, int id)
     /* TODO define timeouts perhaps in qvd_init */
     select(socket+1, &myset, &zero, &zero, NULL);
     if ((qvd->res = curl_easy_recv(qvd->curl, qvd->buffer.data, BUFFER_SIZE, &bytes_sent)) != CURLE_OK ) {
-      qvd_error(qvd, "An error ocurred in curl_easy_recv: %d <%s>\n", qvd->res, curl_easy_strerror(qvd->res));
+      qvd_error(qvd, "An error ocurred in curl_easy_recv: %ul <%s>\n", qvd->res, curl_easy_strerror(qvd->res));
       return 2;
     }
     qvd->buffer.data[bytes_sent] = 0;

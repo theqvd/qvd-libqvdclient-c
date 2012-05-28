@@ -37,7 +37,7 @@
 #define APPDATA_ENV "APPDATA"
 #define CONF_DIR ".qvd"
 #define CERT_DIR ".qvd/certs"
-
+#define MAX_NX_OPTS_BUFFER 256
 
 /* the buffer size is 32K */
 #define MAX(x,y) ((x) > (y) ? (x) : (y))
@@ -86,6 +86,7 @@ struct qvdclientstruct {
   int (*ssl_verify_callback)(struct qvdclientstruct *qvd, const char *cert_pem_str, const char *cert_pem_data);
   /* You can use userdata for the ssl_verify_callback for example */
   void *userdata;
+  char *nx_options;
 } ;
 typedef struct qvdclientstruct qvdclient;
 
@@ -106,5 +107,6 @@ void qvd_set_link(qvdclient *qvd, const char *link);
 void qvd_set_no_cert_check(qvdclient *qvd);
 void qvd_set_strict_cert_check(qvdclient *qvd);
 void qvd_set_unknown_cert_callback(qvdclient *qvd, int (*ssl_verify_callback)(qvdclient *, const char *cert_pem_str, const char *cert_pem_data));
+void qvd_set_nx_options(qvdclient *qvd, const char *nx_options);
 char *qvd_get_last_error(qvdclient *qvd);
 #endif
