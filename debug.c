@@ -49,6 +49,12 @@ inline void set_debug_level(int level)
 }
 void _qvd_vprintf(const char *format, va_list args)
 {
+  if (get_debug_level() <= 0
+#ifdef ANDROID
+      || get_debug_level() >= ANDROID_LOG_SILENT
+#endif
+      )
+    return;
 
 #ifdef ANDROID
   __android_log_vprint(get_debug_level(), "qvd", format, args);
@@ -60,13 +66,6 @@ void _qvd_vprintf(const char *format, va_list args)
 
 void qvd_printf(const char *format, ...)
 {
-  if (get_debug_level() <= 0
-#ifdef ANDROID
-      || get_debug_level() >= ANDROID_LOG_SILENT
-#endif
-      )
-    return;
-
   va_list args;
   va_start(args, format);
   _qvd_vprintf(format, args);
