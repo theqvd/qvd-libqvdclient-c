@@ -18,15 +18,16 @@ void help(const char *program)
   printf("  -l : Use only list_of_vm (don't try to connect, useful for debugging)\n");
   printf("  -o : Assume One VM, that is connect always to the first VM (useful for debugging)\n");
   printf("  -n : No strict certificate checking, always accept certificate\n");
+  printf("  -x : NX client options. Example: nx/nx,data=0,delta=0,cache=16384,pack=0:0\n");
 }
 
-int parse_params(int argc, char **argv, const char **host, int *port, const char **user, const char **pass, const char **geometry, int *fullscreen, int *only_list_of_vm, int *one_vm, int *no_cert_check)
+int parse_params(int argc, char **argv, const char **host, int *port, const char **user, const char **pass, const char **geometry, int *fullscreen, int *only_list_of_vm, int *one_vm, int *no_cert_check, const char **nx_options)
 {
   int opt, error = 0;
   const char *program = argv[0];
   char *endptr;
 
-  while ((opt = getopt(argc, argv, "?dh:p:u:w:g:flon")) != -1 )
+  while ((opt = getopt(argc, argv, "?dh:p:u:w:g:flonx:")) != -1 )
     {
       switch (opt)
 	{
@@ -66,6 +67,9 @@ int parse_params(int argc, char **argv, const char **host, int *port, const char
 	  break;
 	case 'n':
 	  *no_cert_check = 1;
+	  break;
+	case 'x':
+	  *nx_options = optarg;
 	  break;
 	default:
 	  fprintf(stderr, "Parameter not recognized <%c>\n", opt);
@@ -144,9 +148,9 @@ char *qvd_get_last_error(qvdclient *qvd) {
 
 int main(int argc, char *argv[], char *envp[]) {
   qvdclient *qvd;
-  const char *host = NULL, *user = NULL, *pass = NULL, *geometry = NULL;
+  const char *host = NULL, *user = NULL, *pass = NULL, *geometry = NULL, *nx_options = NULL;
   int port = 8443, fullscreen=0, vm_id, only_list_of_vm=0, one_vm=0, no_cert_check=0;
-  if (parse_params(argc, argv, &host, &port, &user, &pass, &geometry, &fullscreen, &only_list_of_vm, &one_vm, &no_cert_check))
+  if (parse_params(argc, argv, &host, &port, &user, &pass, &geometry, &fullscreen, &only_list_of_vm, &one_vm, &no_cert_check, &nx_options))
     return 1;
 
   qvd = qvd_init(host, port, user, pass);
@@ -158,6 +162,8 @@ int main(int argc, char *argv[], char *envp[]) {
     qvd_set_geometry(qvd, geometry);
   if (fullscreen)
     qvd_set_fullscreen(qvd);
+  if (nx_options)
+    qvd_set_nx_options(qvd, nx_options);
 
   qvd_set_unknown_cert_callback(qvd, accept_unknown_cert_callback);
 

@@ -171,8 +171,8 @@ vmlist *qvd_list_of_vm(qvdclient *qvd) {
     {
       /*    qvd_error(qvd, "An error ocurred getting url <%s>: %d <%s>\n", url, qvd->res, curl_easy_strerror(qvd->res));*/
       /* qvd_error(qvd, "An error ocurred getting url <%s>\n", url); */
-      qvd_error(qvd, "An error ocurred getting url <%s>: %ul (%s)\n", url, qvd->res, curl_easy_strerror(qvd->res)); 
-      /*    qvd_printf("An error ocurred getting url <%s>: %d\n", url, qvd->res);*/
+      /* qvd_error(qvd, "An error ocurred getting url <%s>: %ul (%s)\n", url, qvd->res, curl_easy_strerror((int)qvd->res));  */
+      qvd_printf("An error ocurred getting url <%s>: %ul\n", url, qvd->res);
       /* struct curl_certinfo certinfo; */
       /* curl_easy_getinfo(qvd->curl, CURLINFO_CERTINFO, &certinfo); */
       /* qvd_printf("Number of certs: %d\n", certinfo.num_of_certs);*\/ */
@@ -503,7 +503,7 @@ int _qvd_client_loop(qvdclient *qvd, int connFd, int proxyFd)
 		qvd_printf("Nothing read. receiving curl_easy_recv: %d CURLE_AGAIN, read %d\n", res, read);
 		break;
 	      case CURLE_UNSUPPORTED_PROTOCOL:
-		qvd_printf("Unsupported protocol. receiving curl_easy_recv: %d CURLE_AGAIN (wait for next iteration), read %d\n", res, read);
+		qvd_printf("Unsupported protocol. receiving curl_easy_recv: %d CURLE_UNSUPPORTED_PROTOCOL (wait for next iteration), read %d\n", res, read);
 		break;
 	      default:
 		qvd_error(qvd, "Error receiving curl_easy_recv: %d\n", res);
@@ -547,7 +547,7 @@ int _qvd_client_loop(qvdclient *qvd, int connFd, int proxyFd)
 		qvd_printf("Nothing written, wait for next iteration. curl_easy_send: %d CURLE_AGAIN, written %d\n", res, written);
 		break;
 	      case CURLE_UNSUPPORTED_PROTOCOL:
-		qvd_printf("Unsupported protocol. receiving curl_easy_recv: %d CURLE_AGAIN (wait for next iteration), written %d\n", res, written);
+		qvd_printf("Unsupported protocol. receiving curl_easy_send: %d CURLE_UNSUPPORTED_PROTOCOL (wait for next iteration), written %d\n", res, written);
 		break;
 	      default:
 		qvd_error(qvd, "Error sending curl_easy_send: %d", res);
