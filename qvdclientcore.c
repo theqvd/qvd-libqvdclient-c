@@ -344,18 +344,21 @@ int _qvd_set_certdir(qvdclient *qvd)
 {
   char *home = getenv(HOME_ENV);
   char *appdata = getenv(APPDATA_ENV);
+
   int result;
-  if (home == NULL && appdata == NULL)
+  if (home == NULL && appdata == NULL && !qvd->home && (*(qvd->home)) == '\0')
     {
-      qvd_error(qvd, "Error %s and %s environment var were not defined, cannot save to $HOME/.qvd/certs", HOME_ENV, APPDATA_ENV);
+      qvd_error(qvd, "Error %s and %s environment var were not defined, cannot save to $HOME/.qvd/certs, you can try to set also qvd_set_home", HOME_ENV, APPDATA_ENV);
       return 0;
     }
 
-  if (home == NULL)
-    {
-      home = appdata;
-      qvd_printf("%s was not defined using %s environment var", HOME_ENV, APPDATA_ENV);
-    }
+  if (qvd->home && (*(qvd->home))) {
+      home = qvd->home;
+    } else if (home == NULL && appdata != NULL)
+	{
+	  home = appdata;
+	  qvd_printf("%s was not defined using %s environment var", HOME_ENV, APPDATA_ENV);
+	}
     
 
   /* Define .qvd/certs in qvdclient.h */
