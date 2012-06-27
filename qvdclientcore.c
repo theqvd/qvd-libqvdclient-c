@@ -153,6 +153,12 @@ vmlist *qvd_list_of_vm(qvdclient *qvd) {
   json_error_t error;
   char *command = "/qvd/list_of_vm";
 
+  if (qvd->home && (*(qvd->home)) != '\0') {
+    qvd_printf("Setting NX_HOME to %s", qvd->home);
+    if (setenv("NX_HOME", qvd->home, 1)) {
+      qvd_error(qvd, "Error setting NX_HOME to %s. errno: %d (%s)", qvd->home, errno, strerror(errno));
+    }
+  }
   if (!_qvd_set_certdir(qvd)) {
     qvd_printf("Please set the cert dir");
     return NULL;
@@ -226,11 +232,6 @@ int qvd_connect_to_vm(qvdclient *qvd, int id)
   int result, proxyFd, fd;
   long curlsock;
 
-  if (!_qvd_set_certdir(qvd)) {
-    qvd_printf("Please set the cert dir");
-    return 5;
-  }
-
   qvd_printf("qvd_connect_to_vm(%p,%d)", qvd, id);
   if (qvd->display && (*(qvd->display)) != '\0') {
     qvd_printf("Setting DISPLAY to %s", qvd->display);
@@ -239,10 +240,14 @@ int qvd_connect_to_vm(qvdclient *qvd, int id)
     }
   }
   if (qvd->home && (*(qvd->home)) != '\0') {
-    qvd_printf("Setting NX_HOME to %s", qvd->display);
+    qvd_printf("Setting NX_HOME to %s", qvd->home);
     if (setenv("NX_HOME", qvd->home, 1)) {
       qvd_error(qvd, "Error setting NX_HOME to %s. errno: %d (%s)", qvd->home, errno, strerror(errno));
     }
+  }
+  if (!_qvd_set_certdir(qvd)) {
+    qvd_printf("Please set the cert dir");
+    return 5;
   }
 
   result = _qvd_switch_protocols(qvd, id);
