@@ -529,8 +529,8 @@ int _qvd_client_loop(qvdclient *qvd, int connFd, int proxyFd)
 	    ret = QvdBufferRead(&proxyRead, proxyFd);
 	    if (ret == 0)
 	      {
-		qvd_printf("No more bytes to read from proxyFd wait for next iteration\n");
-		/*		proxyFd = -1;*/
+		qvd_printf("No more bytes to read from proxyFd ending\n");
+		proxyFd = -1;
 	      }
 	    if (ret < 0)
 	      {
