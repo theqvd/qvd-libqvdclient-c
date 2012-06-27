@@ -78,11 +78,6 @@ qvdclient *qvd_init(const char *hostname, const int port, const char *username, 
     return NULL;
   }
 
-  if (!_qvd_set_certdir(qvd)) {
-    free(qvd);
-    return NULL;
-  }
-
   qvd->curl = curl_easy_init();
   if (!qvd->curl) {
     qvd_error(qvd, "Error initializing curl\n");
@@ -158,6 +153,11 @@ vmlist *qvd_list_of_vm(qvdclient *qvd) {
   json_error_t error;
   char *command = "/qvd/list_of_vm";
 
+  if (!_qvd_set_certdir(qvd)) {
+    qvd_printf("Please set the cert dir");
+    return NULL;
+  }
+
   if (snprintf(url, MAX_BASEURL, "%s%s", qvd->baseurl, command) >= MAX_BASEURL) {
     qvd_error(qvd, "Error initializing url in list_of_vm, length is longer than %d\n", MAX_BASEURL);
     return NULL;
@@ -225,6 +225,11 @@ int qvd_connect_to_vm(qvdclient *qvd, int id)
 {
   int result, proxyFd, fd;
   long curlsock;
+
+  if (!_qvd_set_certdir(qvd)) {
+    qvd_printf("Please set the cert dir");
+    return 5;
+  }
 
   qvd_printf("qvd_connect_to_vm(%p,%d)", qvd, id);
   if (qvd->display && (*(qvd->display)) != '\0') {
