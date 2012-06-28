@@ -560,7 +560,8 @@ int _qvd_client_loop(qvdclient *qvd, int connFd, int proxyFd)
 		qvd_printf("Nothing written, wait for next iteration. curl_easy_send: %d CURLE_AGAIN, written %d\n", res, written);
 		break;
 	      case CURLE_UNSUPPORTED_PROTOCOL:
-		qvd_printf("Unsupported protocol. receiving curl_easy_send: %d CURLE_UNSUPPORTED_PROTOCOL (wait for next iteration), written %d\n", res, written);
+		qvd_error("Unsupported protocol. receiving curl_easy_send: %d CURLE_UNSUPPORTED_PROTOCOL (wait for next iteration), written %d\n", res, written);
+		connFd = -1;
 		break;
 	      default:
 		qvd_error(qvd, "Error sending curl_easy_send: %d", res);
