@@ -375,6 +375,7 @@ int _qvd_set_certdir(qvdclient *qvd)
       qvd_error(qvd, "Cert string too long (%d) recompile program. Path is %s", MAXCERTSTRING, qvd->certpath);
       return 0;
     }
+  curl_easy_setopt(qvd->curl, CURLOPT_CAPATH, qvd->certpath);
   return 1;
 }
 
