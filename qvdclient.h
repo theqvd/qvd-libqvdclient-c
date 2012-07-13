@@ -42,7 +42,7 @@
 /* the buffer size is 32K */
 #define MAX(x,y) ((x) > (y) ? (x) : (y))
 #define MIN(x,y) ((x) < (y) ? (x) : (y))
-/*#define TRACE*/
+#define TRACE
 
 typedef struct {
   int id;
