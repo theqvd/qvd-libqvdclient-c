@@ -146,6 +146,10 @@ char *qvd_get_last_error(qvdclient *qvd) {
   return qvd->error_buffer;
 }
 
+int progress_callback(qvdclient *qvd, const char *message) {
+  qvd_printf("Progress Callback: %s", message);
+}
+
 int main(int argc, char *argv[], char *envp[]) {
   qvdclient *qvd;
   const char *host = NULL, *user = NULL, *pass = NULL, *geometry = NULL, *nx_options = NULL;
@@ -166,6 +170,7 @@ int main(int argc, char *argv[], char *envp[]) {
     qvd_set_nx_options(qvd, nx_options);
 
   qvd_set_unknown_cert_callback(qvd, accept_unknown_cert_callback);
+  qvd_set_progress_callback(qvd, progress_callback);
 
   /* TODO check unknown password, currently it returns NULL */
   if (qvd_list_of_vm(qvd) == NULL)

@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
+/* __USE_GNU is for strcasestr */
+#define __USE_GNU
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/select.h>
@@ -41,6 +43,7 @@ void _qvd_print_environ();
 /* Init and free functions */
 qvdclient *qvd_init(const char *hostname, const int port, const char *username, const char *password) {
   qvdclient *qvd;
+  qvd_printf("Starting qvd_init. QVD Version: <%s>. Curl Version: <%s>, Openssl version: <%s>", ABOUT, curl_version(), OPENSSL_VERSION_TEXT);
   if (strlen(username) + strlen(password) + 2 > MAX_USERPWD) {
     qvd_error(qvd, "Length of username and password + 2 is longer than %d\n", MAX_USERPWD);
     return NULL;
@@ -84,10 +87,12 @@ qvdclient *qvd_init(const char *hostname, const int port, const char *username, 
     free(qvd);
     return NULL;
   }
-  if (get_debug_level()) 
+  if (get_debug_level()) {
     curl_easy_setopt(qvd->curl, CURLOPT_VERBOSE, 1L);
+    curl_easy_setopt(qvd->curl, CURLOPT_DEBUGFUNCTION, qvd_curl_debug_callback);
+  }
 
-  /* curl_easy_setopt(qvd->curl, CURLOPT_SSL_VERIFYPEER, 1L); */
+  curl_easy_setopt(qvd->curl, CURLOPT_ERRORBUFFER, qvd->error_buffer);  /* curl_easy_setopt(qvd->curl, CURLOPT_SSL_VERIFYPEER, 1L); */
   /* curl_easy_setopt(qvd->curl, CURLOPT_SSL_VERIFYHOST, 2L); */
   curl_easy_setopt(qvd->curl, CURLOPT_CERTINFO, 1L);
   curl_easy_setopt(qvd->curl, CURLOPT_CAPATH, qvd->certpath);
@@ -121,6 +126,7 @@ qvdclient *qvd_init(const char *hostname, const int port, const char *username, 
   qvd->print_enabled = 0;
   qvd->ssl_no_cert_check = 0;
   qvd->ssl_verify_callback = NULL;
+  qvd->progress_callback = NULL;
   qvd->userdata = NULL;
   qvd->nx_options = NULL;
 
@@ -175,13 +181,7 @@ vmlist *qvd_list_of_vm(qvdclient *qvd) {
   qvd_printf("After easy_perform: %ul\n", qvd->res);
   if (qvd->res)
     {
-      /*    qvd_error(qvd, "An error ocurred getting url <%s>: %d <%s>\n", url, qvd->res, curl_easy_strerror(qvd->res));*/
-      /* qvd_error(qvd, "An error ocurred getting url <%s>\n", url); */
-      /* qvd_error(qvd, "An error ocurred getting url <%s>: %ul (%s)\n", url, qvd->res, curl_easy_strerror((int)qvd->res));  */
       qvd_printf("An error ocurred getting url <%s>: %ul\n", url, qvd->res);
-      /* struct curl_certinfo certinfo; */
-      /* curl_easy_getinfo(qvd->curl, CURLINFO_CERTINFO, &certinfo); */
-      /* qvd_printf("Number of certs: %d\n", certinfo.num_of_certs);*\/ */
       return NULL;
     }
   
@@ -222,8 +222,9 @@ vmlist *qvd_list_of_vm(qvdclient *qvd) {
   /*  QvdBufferReset(&(qvd->buffer));*/
   if (qvd->numvms <= 0) {
     qvd_error(qvd, "No virtual machines available for user %s\n", qvd->username);
+  } else {
+    qvd_progress(qvd, "Returning list of vms");
   }
-
   return qvd->vmlist;
 }
 
@@ -264,8 +265,11 @@ int qvd_connect_to_vm(qvdclient *qvd, int id)
 
   qvd_printf("Remote fd: %d Local fd: %d\n", fd, proxyFd);
   qvd_printf("Before _qvd_client_loop\n");
-  _qvd_client_loop(qvd, fd, proxyFd);
+  result = _qvd_client_loop(qvd, fd, proxyFd);
   shutdown(proxyFd, 2);
+  if (result)
+    return 6;
+
   return 0;
 }
 
@@ -328,6 +332,12 @@ void qvd_set_unknown_cert_callback(qvdclient *qvd, int (*ssl_verify_callback)(qv
   qvd->ssl_verify_callback = ssl_verify_callback;
 }
 
+void qvd_set_progress_callback(qvdclient *qvd, int (*progress_callback)(qvdclient *, const char *message))
+{
+  qvd_printf("Setting progress callback");
+  qvd->progress_callback = progress_callback;
+}
+
 void qvd_set_nx_options(qvdclient *qvd, const char *nx_options) {
   /*  MAX_NX_OPTS_BUFFER */
   /* Should be null in case it was never defined */
@@ -383,7 +393,7 @@ int _qvd_set_certdir(qvdclient *qvd)
 int _qvd_set_base64_auth(qvdclient *qvd)
 {
   CURLcode error;
-  char *ptr = NULL;
+  char *ptr = NULL, *content;
   size_t outlen;
   int result = 0;
   error = Curl_base64_encode((struct SessionHandle *) qvd,
@@ -451,12 +461,14 @@ int _qvd_proxy_connect(qvdclient *qvd)
 int _qvd_client_loop(qvdclient *qvd, int connFd, int proxyFd)
 {
   qvd_printf("_qvd_client_loop\n");
+  int result = 0;
   struct timeval timeout;
   fd_set rfds;
   fd_set wfds;
-  int ret, err, maxfds;
+  int ret, err, maxfds, numunsupportedprotocolerrs;
   QvdBuffer proxyWrite, proxyRead;
   qvd_printf("_qvd_client_loop(%p, %d, %d)\n", qvd, connFd, proxyFd);
+  numunsupportedprotocolerrs = 0;
   QvdBufferInit(&proxyWrite);
   QvdBufferInit(&proxyRead);
   do
@@ -485,7 +497,7 @@ int _qvd_client_loop(qvdclient *qvd, int connFd, int proxyFd)
 
       if (ret < 0)
 	{
-	  qvd_error("Error in _qvd_client_loop: select() %s\n", strerror(errno));
+	  qvd_error(qvd, "Error in _qvd_client_loop: select() %s\n", strerror(errno));
 	  return 1;
 	}
 #ifdef TRACE
@@ -497,6 +509,7 @@ int _qvd_client_loop(qvdclient *qvd, int connFd, int proxyFd)
 	  {
 	    size_t read;
 	    int res;
+	    read = 0; /* handle case of CURLE_UNSUPPORTED_PROTOCOL where read does not gets modified */
 	    res = curl_easy_recv(qvd->curl, proxyWrite.data+proxyWrite.offset,
 				 BUFFER_SIZE-proxyWrite.size, &read);
 
@@ -506,23 +519,42 @@ int _qvd_client_loop(qvdclient *qvd, int connFd, int proxyFd)
 #ifdef TRACE
 		qvd_printf("curl: recv'd %ld\n", read);
 #endif
-		/* TODO if curl recvd is 0 then end */
 		proxyWrite.size += read;
 		if (read == 0)
 		  {
 		    qvd_printf("Setting connFd to 0, End of stream\n");
 		    connFd = -1; 
 		  }
+		numunsupportedprotocolerrs = 0;
 		break;
 	      case CURLE_AGAIN:
 		qvd_printf("Nothing read. receiving curl_easy_recv: %d CURLE_AGAIN, read %d\n", res, read);
 		break;
 	      case CURLE_UNSUPPORTED_PROTOCOL:
-		qvd_printf("Unsupported protocol. receiving curl_easy_recv: %d CURLE_UNSUPPORTED_PROTOCOL (wait for next iteration), read %d\n", res, read);
+		numunsupportedprotocolerrs++;
+		qvd_printf("Unsupported protocol. receiving curl_easy_recv: %d CURLE_UNSUPPORTED_PROTOCOL (wait for next iteration), read %d, number of sequential errors=%d\n", res, read, numunsupportedprotocolerrs);
+		qvd_printf("Error buffer: %s", qvd->error_buffer);
+#ifdef TRACE
+		qvd_printf("curle_unsupported_protocol string size");
+		int i;
+		for (i=0; i < read; i++)
+		  qvd_printf("%x %c ",proxyWrite.data[i], proxyWrite.data[i]);
+		qvd_printf("\n");
+#endif
+# define MAX_CURLE_UNSUPPORTED_PROTOCOL 1
+		if (numunsupportedprotocolerrs >= MAX_CURLE_UNSUPPORTED_PROTOCOL) {
+		  qvd_error(qvd, "Unsupported protocol received %d times. receiving curl_easy_recv: %d CURLE_UNSUPPORTED_PROTOCOL (wait for next iteration), read %d, number of sequential errors=%d\n", MAX_CURLE_UNSUPPORTED_PROTOCOL, res, read, numunsupportedprotocolerrs);
+		  /* An error we need to finish the connection */
+		  connFd = -1;
+		  /*		  proxyFd = -1;  */
+		  result = 0;
+		}
 		break;
 	      default:
 		qvd_error(qvd, "Error receiving curl_easy_recv: %d\n", res);
 		connFd = -1;
+		/* proxyFd = -1; */
+		result = -1;
 	      }
 	  }
 	/* Read from NX and store in proxyRead buffer */
@@ -540,6 +572,15 @@ int _qvd_client_loop(qvdclient *qvd, int connFd, int proxyFd)
 		proxyFd = -1;
 	      }
 	  }
+	if (proxyFd > 0 && QvdBufferCanWrite(&proxyWrite))
+	  {
+	    int ret;
+	    ret = QvdBufferWrite(&proxyWrite, proxyFd);
+	    if (ret < 0 && errno != EINTR) {
+	      qvd_error(qvd, "Error reading from proxyFd: %d %s\n", errno, strerror(errno));
+	      proxyFd = -1;
+	    }
+	  }
 	if (connFd > 0 && QvdBufferCanWrite(&proxyRead))
 	  {
 	    /*QvdBufferWrite(&proxyRead, connFd);*/
@@ -556,33 +597,43 @@ int _qvd_client_loop(qvdclient *qvd, int connFd, int proxyFd)
 #endif
 		if (proxyRead.offset >= proxyRead.size)
 		  QvdBufferReset(&proxyRead);
+		numunsupportedprotocolerrs = 0;
 		break;
 	      case CURLE_AGAIN:
-		/* TODO create loop to write different data */ 
 		qvd_printf("Nothing written, wait for next iteration. curl_easy_send: %d CURLE_AGAIN, written %d\n", res, written);
 		break;
 	      case CURLE_UNSUPPORTED_PROTOCOL:
-		qvd_error("Unsupported protocol. receiving curl_easy_send: %d CURLE_UNSUPPORTED_PROTOCOL (wait for next iteration), written %d\n", res, written);
-		connFd = -1;
+		numunsupportedprotocolerrs++;
+		qvd_printf("Unsupported protocol sent %d times. sending curl_easy_sendv: %d CURLE_UNSUPPORTED_PROTOCOL (wait for next iteration), written %d, number of sequential errors=%d\n", MAX_CURLE_UNSUPPORTED_PROTOCOL, res, written, numunsupportedprotocolerrs);
+		qvd_printf("Error buffer: %s", qvd->error_buffer);
+
+#ifdef TRACE
+		qvd_printf("curle_unsupported_protocol string size");
+		int i;
+		for (i=0; i < written; i++)
+		  qvd_printf("%x %c ",proxyWrite.data[i], proxyWrite.data[i]);
+		qvd_printf("\n");
+#endif
+		if (numunsupportedprotocolerrs >= MAX_CURLE_UNSUPPORTED_PROTOCOL) {
+		  qvd_error(qvd, "Unsupported protocol sent %d times. sending curl_easy_sendv: %d CURLE_UNSUPPORTED_PROTOCOL (wait for next iteration), written %d, number of sequential errors=%d\n", MAX_CURLE_UNSUPPORTED_PROTOCOL, res, written, numunsupportedprotocolerrs);
+		  /* An error we need to finish the connection */
+		  /* TODO only finish connFd */
+		  connFd = -1;
+		  /*		  proxyFd = -1; */
+		  result = 0;
+		}
 		break;
 	      default:
 		qvd_error(qvd, "Error sending curl_easy_send: %d", res);
 		connFd = -1;
 	      }
 	  }
-	if (proxyFd > 0 && QvdBufferCanWrite(&proxyWrite))
-	  {
-	    int ret;
-	    ret = QvdBufferWrite(&proxyWrite, proxyFd);
-	    if (ret < 0 && errno != EINTR) {
-	      qvd_error(qvd, "Error reading from proxyFd: %d %s\n", errno, strerror(errno));
-	      proxyFd = -1;
-	    }
-	  }
     } while (connFd > 0 && proxyFd > 0);
   
+  qvd_printf("before NXTransDestroy");
   NXTransDestroy(NX_FD_ANY);
-  return 0;
+  qvd_printf("after NXTransDestroy");
+  return result;
 }
 
 size_t _qvd_write_buffer_callback(void *contents, size_t size, size_t nmemb, void *buffer) 
@@ -592,13 +643,15 @@ size_t _qvd_write_buffer_callback(void *contents, size_t size, size_t nmemb, voi
     return bytes_written;
 }
 
+
 int _qvd_switch_protocols(qvdclient *qvd, int id)
 {
   fd_set myset, zero;
-  size_t bytes_sent;
-  int socket, i;
+  size_t bytes_sent, bytes_received, bytes_received_total;
+  int socket, i, content_length, content_size_parsed;
   char url[MAX_BASEURL];
   char base64auth[MAX_PARAM];
+  char *ptr, *content;
   curl_easy_setopt(qvd->curl, CURLOPT_URL, qvd->baseurl);
   curl_easy_setopt(qvd->curl, CURLOPT_CONNECT_ONLY, 1L);
   curl_easy_perform(qvd->curl);
@@ -617,6 +670,7 @@ int _qvd_switch_protocols(qvdclient *qvd, int id)
     return 1;
   }
 
+  /* TODO perhaps put this in another func ??? */
 
   FD_ZERO(&myset);
   FD_ZERO(&zero);
@@ -625,16 +679,92 @@ int _qvd_switch_protocols(qvdclient *qvd, int id)
   for (i=0; i<MAX_HTTP_RESPONSES_FOR_UPGRADE; ++i) {
     /* TODO define timeouts perhaps in qvd_init */
     select(socket+1, &myset, &zero, &zero, NULL);
-    if ((qvd->res = curl_easy_recv(qvd->curl, qvd->buffer.data, BUFFER_SIZE, &bytes_sent)) != CURLE_OK ) {
+    if ((qvd->res = curl_easy_recv(qvd->curl, qvd->buffer.data, BUFFER_SIZE, &bytes_received)) != CURLE_OK ) {
       qvd_error(qvd, "An error ocurred in curl_easy_recv: %ul <%s>\n", qvd->res, curl_easy_strerror(qvd->res));
       return 2;
     }
-    qvd->buffer.data[bytes_sent] = 0;
+    qvd->buffer.data[bytes_received] = 0;
     qvd_printf("%d input received was <%s>\n", i, qvd->buffer.data);
+    /* TODO what happens if  for other strings
+V/qvd     ( 7551): Before select on send socket is: 43
+V/qvd     ( 7551): 0 input received was <HTTP/1.1 403 Forbidden
+V/qvd     ( 7551): Content-Type: text/plain
+V/qvd     ( 7551): Content-Length: 56
+V/qvd     ( 7551): 
+V/qvd     ( 7551): >
+V/qvd     ( 7551): 1 input received was <The requested virtual machine is offline for maintenance>
+
+ */
+
+
     if (strstr(qvd->buffer.data, "HTTP/1.1 101")) {
       qvd_printf("Upgrade of protocol was done\n");
       break;
     }
+
+#define PROGRESSINFO "\r\nX-QVD-VM-Info: "
+    if (strstr(qvd->buffer.data, "HTTP/1.1 102")) {
+      qvd_printf("Progress message");
+      if ((ptr = strcasestr(qvd->buffer.data, PROGRESSINFO)) != NULL) {
+#ifdef TRACE
+	qvd_printf("ptr is %s and size is %d", ptr, strlen(PROGRESSINFO));
+#endif
+	ptr += strlen(PROGRESSINFO);
+	qvd_progress(qvd, ptr);
+      }
+#ifdef TRACE
+      else {
+	qvd_printf("Pointer finding %s is null", PROGRESSINFO);
+      }
+#endif
+    }
+
+    /* TODO cleanup printf */
+    if (strstr(qvd->buffer.data, "HTTP/1.1 2")
+	|| strstr(qvd->buffer.data, "HTTP/1.1 3")
+	|| strstr(qvd->buffer.data, "HTTP/1.1 4")
+	|| strstr(qvd->buffer.data, "HTTP/1.1 5")) {
+      bytes_received_total = 0;
+#define CONTENT_LENGTH "\r\nContent-Length: "
+      if ((ptr = strcasestr(qvd->buffer.data, CONTENT_LENGTH)) != NULL) {
+	ptr += strlen(CONTENT_LENGTH);
+#ifdef TRACE
+	qvd_printf("Parsing content length from <%s> and starting in <%s>", qvd->buffer.data, ptr);
+#endif
+	content_length = -1;
+	if (sscanf(ptr, "%d", &content_length) != 1) {
+	  qvd_printf("Error parsing content-length setting to -1: %d", content_length);
+	  content_length = -1;	  
+	}
+      }
+      while (bytes_received < BUFFER_SIZE) {
+	qvd_printf("Waiting for extra data after found 2xx, 3xx, 4xx or 5xx code <%s>", qvd->buffer.data);
+	select(socket+1, &myset, &zero, &zero, NULL);
+       
+	ptr = qvd->buffer.data;
+	ptr += bytes_received;
+	/* TODO implement callback for info */
+	if ((qvd->res = curl_easy_recv(qvd->curl, ptr, BUFFER_SIZE, &bytes_received_total)) != CURLE_OK ) {
+	  ptr = strstr(qvd->buffer.data, "\r\n\r\n");
+	  qvd_error(qvd, "Error received in qvd_curl_easy_recv: %d. <%s>", qvd->res, ptr);
+	  return 7;
+	}
+	bytes_received += bytes_received_total;
+#define DOUBLENEWLINE "\r\n\r\n"
+	content = strstr(qvd->buffer.data, DOUBLENEWLINE);
+	content_size_parsed = content != NULL ? strlen(content): -1;
+#ifdef TRACE
+	qvd_printf("The bytes received were: %d, and curle code was: %d, content: <%s>, size of content: %d", bytes_received_total, qvd->res, content, content_size_parsed);
+#endif
+	if (bytes_received == 0 || content_size_parsed >= content_length) {
+	  content += strlen(DOUBLENEWLINE);
+	  qvd_error(qvd, "Error: <%s>", content);
+	  return 8;
+	}
+     
+      }
+    }
+
   }
   if (i >=10 ) {
     qvd_error(qvd, "Error not received response for protocol upgrade in %d tries http/1.1\n", i);
@@ -692,7 +822,7 @@ int _qvd_create_dir(qvdclient *qvd, const char *home, const char *subdir)
     }
   if (!S_ISDIR(fs_stat.st_mode))
     {
-      qvd_error("Error accessing dir $HOME/%s (%s) the file is not a directory", subdir, path);
+      qvd_error(qvd, "Error accessing dir $HOME/%s (%s) the file is not a directory", subdir, path);
       return 0;
     }
   return 1;
@@ -815,5 +945,4 @@ CURLcode _qvd_sslctxfun(CURL *curl, SSL_CTX *sslctx, void *parm)
 
   return CURLE_OK;
 } 
-
 

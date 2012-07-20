@@ -40,7 +40,7 @@ void QvdVmListAppendVm(qvdclient *qvd, vmlist *vmlistptr, vm *vmptr) {
     ptr = ptr->next;
   }
   if (!(ptr->next=malloc(sizeof(vmlist)))) {
-    qvd_error("Error allocating memory for list of Virtual Machines");
+    qvd_error(qvd, "Error allocating memory for list of Virtual Machines");
     return;
   }
   ptr->next->data = vmptr;

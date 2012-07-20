@@ -42,7 +42,7 @@
 /* the buffer size is 32K */
 #define MAX(x,y) ((x) > (y) ? (x) : (y))
 #define MIN(x,y) ((x) < (y) ? (x) : (y))
-#define TRACE
+/* #define TRACE */
 
 typedef struct {
   int id;
@@ -84,6 +84,7 @@ struct qvdclientstruct {
   char useragent[MAX_USERAGENT];
   int ssl_no_cert_check;
   int (*ssl_verify_callback)(struct qvdclientstruct *qvd, const char *cert_pem_str, const char *cert_pem_data);
+  int (*progress_callback)(struct qvdclientstruct *, const char *message);
   /* You can use userdata for the ssl_verify_callback for example */
   void *userdata;
   char *nx_options;
@@ -107,6 +108,17 @@ void qvd_set_link(qvdclient *qvd, const char *link);
 void qvd_set_no_cert_check(qvdclient *qvd);
 void qvd_set_strict_cert_check(qvdclient *qvd);
 void qvd_set_unknown_cert_callback(qvdclient *qvd, int (*ssl_verify_callback)(qvdclient *, const char *cert_pem_str, const char *cert_pem_data));
+void qvd_set_progress_callback(qvdclient *qvd, int (*progress_callback)(qvdclient *, const char *message));
 void qvd_set_nx_options(qvdclient *qvd, const char *nx_options);
 char *qvd_get_last_error(qvdclient *qvd);
+
+int qvd_curl_debug_callback(CURL *handle, curl_infotype type,
+			    unsigned char *data, size_t size,
+			    void *userp);
+void qvd_printf(const char *format, ...);
+void qvd_error(qvdclient *qvd, const char *format, ...);
+void qvd_progress(qvdclient *qvd, const char *message);
+void set_debug_level(int level);
+int get_debug_level(void);
+
 #endif

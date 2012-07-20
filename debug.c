@@ -83,3 +83,98 @@ void qvd_error(qvdclient *qvd, const char *format, ...)
   qvd->error_buffer[MAX_ERROR_BUFFER-1] = '\0';
 }
 
+void qvd_progress(qvdclient *qvd, const char *message)
+{
+  if (qvd->progress_callback == NULL)
+    qvd_printf("Progress callback not defined. Progress message: %s", message);
+  else
+    qvd->progress_callback(qvd, message);
+}
+
+
+void qvd_curl_dump(const char *text,
+          unsigned char *ptr, size_t size,
+          char nohex)
+{
+  size_t i;
+  size_t c;
+
+  unsigned int width=0x10;
+
+  if(nohex)
+    /* without the hex output, we can fit more on screen */
+    width = 0x40;
+
+  qvd_printf("%s, %10.10ld bytes (0x%8.8lx)\n",
+          text, (long)size, (long)size);
+
+  for(i=0; i<size; i+= width) {
+
+    qvd_printf("%4.4lx: ", (long)i);
+
+    if(!nohex) {
+      /* hex not disabled, show it */
+      for(c = 0; c < width; c++)
+        if(i+c < size)
+          qvd_printf("%02x ", ptr[i+c]);
+        else
+          qvd_printf("   ");
+    }
+
+    for(c = 0; (c < width) && (i+c < size); c++) {
+      /* check for 0D0A; if found, skip past and start a new line of output */
+      if (nohex && (i+c+1 < size) && ptr[i+c]==0x0D && ptr[i+c+1]==0x0A) {
+        i+=(c+2-width);
+        break;
+      }
+
+      qvd_printf("%c",
+              (ptr[i+c]>=0x20) && (ptr[i+c]<0x80)?ptr[i+c]:'.');
+
+      /* check again for 0D0A, to avoid an extra \n if it's at width */
+      if (nohex && (i+c+2 < size) && ptr[i+c+1]==0x0D && ptr[i+c+2]==0x0A) {
+        i+=(c+3-width);
+        break;
+      }
+    }
+    qvd_printf("\n"); /* newline */
+  }
+}
+
+
+int qvd_curl_debug_callback(CURL *handle, curl_infotype type,
+             unsigned char *data, size_t size,
+             void *userp)
+{
+  const char *text;
+
+  (void)userp;
+  (void)handle; /* prevent compiler warning */
+
+  switch (type) {
+  case CURLINFO_TEXT:
+    fprintf(stderr, "== Info: %s", data);
+  default: /* in case a new one is introduced to shock us */
+    return 0;
+
+  case CURLINFO_HEADER_OUT:
+    text = "=> Send header";
+    break;
+  case CURLINFO_DATA_OUT:
+    text = "=> Send data";
+    break;
+  case CURLINFO_HEADER_IN:
+    text = "<= Recv header";
+    break;
+  case CURLINFO_DATA_IN:
+    text = "<= Recv data";
+    break;
+  }
+
+#ifdef TRACE
+  qvd_curl_dump(text, data, size, 1);
+#else
+  qvd_curl_dump(text, data, size, 0);
+#endif
+  return 0;
+}
