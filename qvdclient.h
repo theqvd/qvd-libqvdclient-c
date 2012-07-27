@@ -8,8 +8,9 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <curl/curl.h>
-/* Also used for vm list  normall y 16KB*2 */
-#define BUFFER_SIZE CURL_MAX_WRITE_SIZE * 2
+/* Also used for vm list  normally 16KB*2 */
+/* #define BUFFER_SIZE CURL_MAX_WRITE_SIZE * 2 */
+#define BUFFER_SIZE 65536
 #include "qvdbuffer.h"
 
 #define ABOUT "About: $Id$"

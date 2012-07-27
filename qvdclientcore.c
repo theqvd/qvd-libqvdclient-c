@@ -87,6 +87,7 @@ qvdclient *qvd_init(const char *hostname, const int port, const char *username, 
     free(qvd);
     return NULL;
   }
+  qvd_printf("Curl pointer is %p", qvd->curl);
   if (get_debug_level()) {
     curl_easy_setopt(qvd->curl, CURLOPT_VERBOSE, 1L);
     curl_easy_setopt(qvd->curl, CURLOPT_DEBUGFUNCTION, qvd_curl_debug_callback);
@@ -145,6 +146,7 @@ qvdclient *qvd_init(const char *hostname, const int port, const char *username, 
 }
 
 void qvd_free(qvdclient *qvd) {
+  qvd_printf("Calling qvd_free");
   curl_easy_cleanup(qvd->curl);
   QvdVmListFree(qvd->vmlist);
   /* nx_options should be null */
@@ -267,6 +269,10 @@ int qvd_connect_to_vm(qvdclient *qvd, int id)
   qvd_printf("Before _qvd_client_loop\n");
   result = _qvd_client_loop(qvd, fd, proxyFd);
   shutdown(proxyFd, 2);
+  qvd_printf("before NXTransDestroy\n");
+  NXTransDestroy(NX_FD_ANY);
+  qvd_printf("after NXTransDestroy\n");
+
   if (result)
     return 6;
 
@@ -461,18 +467,18 @@ int _qvd_proxy_connect(qvdclient *qvd)
 int _qvd_client_loop(qvdclient *qvd, int connFd, int proxyFd)
 {
   qvd_printf("_qvd_client_loop\n");
-  int result = 0;
+  size_t read = 0, written = 0;
   struct timeval timeout;
-  fd_set rfds;
-  fd_set wfds;
-  int ret, err, maxfds, numunsupportedprotocolerrs;
+  fd_set rfds, wfds;
+  int ret, res, err, maxfds, numunsupportedprotocolerrs = 0, result = 0, i;
+
   QvdBuffer proxyWrite, proxyRead;
   qvd_printf("_qvd_client_loop(%p, %d, %d)\n", qvd, connFd, proxyFd);
-  numunsupportedprotocolerrs = 0;
   QvdBufferInit(&proxyWrite);
   QvdBufferInit(&proxyRead);
   do
     {
+      ret = 0;
       timeout.tv_sec = 5;
       timeout.tv_usec = 0;
       maxfds = 1+MAX(connFd, proxyFd);
@@ -501,138 +507,128 @@ int _qvd_client_loop(qvdclient *qvd, int connFd, int proxyFd)
 	  return 1;
 	}
 #ifdef TRACE
-	qvd_printf("isset proxyfd read: %d; connfd read: %d\n",
+      qvd_printf("isset proxyfd read: %d; connfd read: %d\n",
 		   FD_ISSET(proxyFd, &rfds), FD_ISSET(connFd, &rfds));
 #endif
-	/* Read from curl socket and store in proxyWrite buffer */
-	if (connFd > 0 && FD_ISSET(connFd, &rfds))
-	  {
-	    size_t read;
-	    int res;
-	    read = 0; /* handle case of CURLE_UNSUPPORTED_PROTOCOL where read does not gets modified */
-	    res = curl_easy_recv(qvd->curl, proxyWrite.data+proxyWrite.offset,
-				 BUFFER_SIZE-proxyWrite.size, &read);
+      /* Read from curl socket and store in proxyWrite buffer */
+      if (connFd > 0 && FD_ISSET(connFd, &rfds))
+	{
+	  read = 0; /* handle case of CURLE_UNSUPPORTED_PROTOCOL where read does not gets modified */
+	  res = curl_easy_recv(qvd->curl, proxyWrite.data+proxyWrite.offset,
+			       BUFFER_SIZE-proxyWrite.size, &read);
 
-	    switch (res)
-	      {
-	      case CURLE_OK:
+	  switch (res)
+	    {
+	    case CURLE_OK:
 #ifdef TRACE
-		qvd_printf("curl: recv'd %ld\n", read);
+	      qvd_printf("curl: recv'd %ld\n", read);
 #endif
-		proxyWrite.size += read;
-		if (read == 0)
-		  {
-		    qvd_printf("Setting connFd to 0, End of stream\n");
-		    connFd = -1; 
-		  }
-		numunsupportedprotocolerrs = 0;
-		break;
-	      case CURLE_AGAIN:
-		qvd_printf("Nothing read. receiving curl_easy_recv: %d CURLE_AGAIN, read %d\n", res, read);
-		break;
-	      case CURLE_UNSUPPORTED_PROTOCOL:
-		numunsupportedprotocolerrs++;
-		qvd_printf("Unsupported protocol. receiving curl_easy_recv: %d CURLE_UNSUPPORTED_PROTOCOL (wait for next iteration), read %d, number of sequential errors=%d\n", res, read, numunsupportedprotocolerrs);
-		qvd_printf("Error buffer: %s", qvd->error_buffer);
+	      proxyWrite.size += read;
+	      if (read == 0)
+		{
+		  qvd_printf("Setting connFd to 0, End of stream\n");
+		  connFd = -1; 
+		}
+	      numunsupportedprotocolerrs = 0;
+	      break;
+	    case CURLE_AGAIN:
+	      qvd_printf("Nothing read. receiving curl_easy_recv: %d CURLE_AGAIN, read %d\n", res, read);
+	      break;
+	    case CURLE_UNSUPPORTED_PROTOCOL:
+	      numunsupportedprotocolerrs++;
+	      qvd_printf("Unsupported protocol. receiving curl_easy_recv: %d CURLE_UNSUPPORTED_PROTOCOL (wait for next iteration), read %d, number of sequential errors=%d\n", res, read, numunsupportedprotocolerrs);
+	      qvd_printf("Error buffer: %s", qvd->error_buffer);
 #ifdef TRACE
-		qvd_printf("curle_unsupported_protocol string size");
-		int i;
-		for (i=0; i < read; i++)
-		  qvd_printf("%x %c ",proxyWrite.data[i], proxyWrite.data[i]);
-		qvd_printf("\n");
+	      qvd_printf("curle_unsupported_protocol string size");
+	      for (i=0; i < read; i++)
+		qvd_printf("%x %c ",proxyWrite.data[i], proxyWrite.data[i]);
+	      qvd_printf("\n");
 #endif
 # define MAX_CURLE_UNSUPPORTED_PROTOCOL 1
-		if (numunsupportedprotocolerrs >= MAX_CURLE_UNSUPPORTED_PROTOCOL) {
-		  qvd_error(qvd, "Unsupported protocol received %d times. receiving curl_easy_recv: %d CURLE_UNSUPPORTED_PROTOCOL (wait for next iteration), read %d, number of sequential errors=%d\n", MAX_CURLE_UNSUPPORTED_PROTOCOL, res, read, numunsupportedprotocolerrs);
-		  /* An error we need to finish the connection */
-		  connFd = -1;
-		  /*		  proxyFd = -1;  */
-		  result = 0;
-		}
-		break;
-	      default:
-		qvd_error(qvd, "Error receiving curl_easy_recv: %d\n", res);
+	      if (numunsupportedprotocolerrs >= MAX_CURLE_UNSUPPORTED_PROTOCOL) {
+		qvd_error(qvd, "Unsupported protocol received %d times. receiving curl_easy_recv: %d CURLE_UNSUPPORTED_PROTOCOL (wait for next iteration), read %d, number of sequential errors=%d\n", MAX_CURLE_UNSUPPORTED_PROTOCOL, res, read, numunsupportedprotocolerrs);
+		/* An error we need to finish the connection */
 		connFd = -1;
-		/* proxyFd = -1; */
-		result = -1;
+		/*		  proxyFd = -1;  */
+		result = 0;
 	      }
-	  }
-	/* Read from NX and store in proxyRead buffer */
-	if (proxyFd > 0 && FD_ISSET(proxyFd, &rfds))
-	  {
-	    ret = QvdBufferRead(&proxyRead, proxyFd);
-	    if (ret == 0)
-	      {
-		qvd_printf("No more bytes to read from proxyFd ending\n");
-		proxyFd = -1;
-	      }
-	    if (ret < 0)
-	      {
-		qvd_error(qvd, "Error proxyFd read error: %s\n", strerror(errno));
-		proxyFd = -1;
-	      }
-	  }
-	if (proxyFd > 0 && QvdBufferCanWrite(&proxyWrite))
-	  {
-	    int ret;
-	    ret = QvdBufferWrite(&proxyWrite, proxyFd);
-	    if (ret < 0 && errno != EINTR) {
-	      qvd_error(qvd, "Error reading from proxyFd: %d %s\n", errno, strerror(errno));
+	      break;
+	    default:
+	      qvd_error(qvd, "Error receiving curl_easy_recv: %d\n", res);
+	      connFd = -1;
+	      /* proxyFd = -1; */
+	      result = -1;
+	    }
+	}
+      /* Read from NX and store in proxyRead buffer */
+      if (proxyFd > 0 && FD_ISSET(proxyFd, &rfds))
+	{
+	  ret = QvdBufferRead(&proxyRead, proxyFd);
+	  if (ret == 0)
+	    {
+	      qvd_printf("No more bytes to read from proxyFd ending\n");
 	      proxyFd = -1;
 	    }
+	  if (ret < 0)
+	    {
+	      qvd_error(qvd, "Error proxyFd read error: %s\n", strerror(errno));
+	      proxyFd = -1;
+	    }
+	}
+      if (proxyFd > 0 && QvdBufferCanWrite(&proxyWrite))
+	{
+	  ret = QvdBufferWrite(&proxyWrite, proxyFd);
+	  if (ret < 0 && errno != EINTR) {
+	    qvd_error(qvd, "Error reading from proxyFd: %d %s\n", errno, strerror(errno));
+	    proxyFd = -1;
 	  }
-	if (connFd > 0 && QvdBufferCanWrite(&proxyRead))
-	  {
-	    /*QvdBufferWrite(&proxyRead, connFd);*/
-	    size_t written = 0;
-	    int res;
-	    res = curl_easy_send(qvd->curl, proxyRead.data+proxyRead.offset,
-				 proxyRead.size-proxyRead.offset, &written);
-	    switch (res)
-	      {
-	      case CURLE_OK:
-		proxyRead.offset += written;
+	}
+      if (connFd > 0 && QvdBufferCanWrite(&proxyRead))
+	{
+	  /*QvdBufferWrite(&proxyRead, connFd);*/
+	  res = curl_easy_send(qvd->curl, proxyRead.data+proxyRead.offset,
+			       proxyRead.size-proxyRead.offset, &written);
+	  switch (res)
+	    {
+	    case CURLE_OK:
+	      proxyRead.offset += written;
 #ifdef TRACE
-		qvd_printf("curl: send'd %ld\n", written);
+	      qvd_printf("curl: send'd %ld\n", written);
 #endif
-		if (proxyRead.offset >= proxyRead.size)
-		  QvdBufferReset(&proxyRead);
-		numunsupportedprotocolerrs = 0;
-		break;
-	      case CURLE_AGAIN:
-		qvd_printf("Nothing written, wait for next iteration. curl_easy_send: %d CURLE_AGAIN, written %d\n", res, written);
-		break;
-	      case CURLE_UNSUPPORTED_PROTOCOL:
-		numunsupportedprotocolerrs++;
-		qvd_printf("Unsupported protocol sent %d times. sending curl_easy_sendv: %d CURLE_UNSUPPORTED_PROTOCOL (wait for next iteration), written %d, number of sequential errors=%d\n", MAX_CURLE_UNSUPPORTED_PROTOCOL, res, written, numunsupportedprotocolerrs);
-		qvd_printf("Error buffer: %s", qvd->error_buffer);
+	      if (proxyRead.offset >= proxyRead.size)
+		QvdBufferReset(&proxyRead);
+	      numunsupportedprotocolerrs = 0;
+	      break;
+	    case CURLE_AGAIN:
+	      qvd_printf("Nothing written, wait for next iteration. curl_easy_send: %d CURLE_AGAIN, written %d\n", res, written);
+	      break;
+	    case CURLE_UNSUPPORTED_PROTOCOL:
+	      numunsupportedprotocolerrs++;
+	      qvd_printf("Unsupported protocol sent %d times. sending curl_easy_sendv: %d CURLE_UNSUPPORTED_PROTOCOL (wait for next iteration), written %d, number of sequential errors=%d\n", MAX_CURLE_UNSUPPORTED_PROTOCOL, res, written, numunsupportedprotocolerrs);
+	      qvd_printf("Error buffer: %s", qvd->error_buffer);
 
 #ifdef TRACE
-		qvd_printf("curle_unsupported_protocol string size");
-		int i;
-		for (i=0; i < written; i++)
-		  qvd_printf("%x %c ",proxyWrite.data[i], proxyWrite.data[i]);
-		qvd_printf("\n");
+	      qvd_printf("curle_unsupported_protocol string size");
+	      for (i=0; i < written; i++)
+		qvd_printf("%x %c ",proxyWrite.data[i], proxyWrite.data[i]);
+	      qvd_printf("\n");
 #endif
-		if (numunsupportedprotocolerrs >= MAX_CURLE_UNSUPPORTED_PROTOCOL) {
-		  qvd_error(qvd, "Unsupported protocol sent %d times. sending curl_easy_sendv: %d CURLE_UNSUPPORTED_PROTOCOL (wait for next iteration), written %d, number of sequential errors=%d\n", MAX_CURLE_UNSUPPORTED_PROTOCOL, res, written, numunsupportedprotocolerrs);
-		  /* An error we need to finish the connection */
-		  /* TODO only finish connFd */
-		  connFd = -1;
-		  /*		  proxyFd = -1; */
-		  result = 0;
-		}
-		break;
-	      default:
-		qvd_error(qvd, "Error sending curl_easy_send: %d", res);
+	      if (numunsupportedprotocolerrs >= MAX_CURLE_UNSUPPORTED_PROTOCOL) {
+		qvd_error(qvd, "Unsupported protocol sent %d times. sending curl_easy_sendv: %d CURLE_UNSUPPORTED_PROTOCOL (wait for next iteration), written %d, number of sequential errors=%d\n", MAX_CURLE_UNSUPPORTED_PROTOCOL, res, written, numunsupportedprotocolerrs);
+		/* An error we need to finish the connection */
+		/* TODO only finish connFd */
 		connFd = -1;
+		/*		  proxyFd = -1; */
+		result = 0;
 	      }
-	  }
+	      break;
+	    default:
+	      qvd_error(qvd, "Error sending curl_easy_send: %d", res);
+	      connFd = -1;
+	    }
+	}
     } while (connFd > 0 && proxyFd > 0);
   
-  qvd_printf("before NXTransDestroy");
-  NXTransDestroy(NX_FD_ANY);
-  qvd_printf("after NXTransDestroy");
   return result;
 }
 

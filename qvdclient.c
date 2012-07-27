@@ -150,12 +150,10 @@ int progress_callback(qvdclient *qvd, const char *message) {
   qvd_printf("Progress Callback: %s", message);
 }
 
-int main(int argc, char *argv[], char *envp[]) {
+
+int qvd_connection(const char *host, int port, const char *user, const char *pass, const char *geometry, int fullscreen, int only_list_of_vm, int one_vm, int no_cert_check, const char *nx_options) {
+  int vm_id;
   qvdclient *qvd;
-  const char *host = NULL, *user = NULL, *pass = NULL, *geometry = NULL, *nx_options = NULL;
-  int port = 8443, fullscreen=0, vm_id, only_list_of_vm=0, one_vm=0, no_cert_check=0;
-  if (parse_params(argc, argv, &host, &port, &user, &pass, &geometry, &fullscreen, &only_list_of_vm, &one_vm, &no_cert_check, &nx_options))
-    return 1;
 
   qvd = qvd_init(host, port, user, pass);
 
@@ -207,6 +205,29 @@ int main(int argc, char *argv[], char *envp[]) {
     }
 
   qvd_connect_to_vm(qvd, vm_id);
+  printf("after qvd_connect_to_vm\n");
   qvd_free(qvd);
   return 0;
+
+
+}
+
+int main(int argc, char *argv[], char *envp[]) {
+  const char *host = NULL, *user = NULL, *pass = NULL, *geometry = NULL, *nx_options = NULL;
+  int port = 8443, fullscreen=0, only_list_of_vm=0, one_vm=0, no_cert_check=0;
+  int result, vm_id;
+  if (parse_params(argc, argv, &host, &port, &user, &pass, &geometry, &fullscreen, &only_list_of_vm, &one_vm, &no_cert_check, &nx_options))
+    return 1;
+
+  result = qvd_connection(host, port, user, pass, geometry, fullscreen, only_list_of_vm, one_vm, no_cert_check, nx_options);
+
+  printf("********************\n***********************\nSecond connection\n****************\n*****************\nwaiting 60 seconds\n");
+  sleep(30);
+  result = qvd_connection(host, port, user, pass, geometry, fullscreen, only_list_of_vm, one_vm, no_cert_check, nx_options);
+
+  /* printf("********************\n***********************\nThird connection\n****************\n*****************\nwaiting 60 seconds\n"); */
+  /* sleep(10); */
+  /* result = qvd_connection(host, port, user, pass, geometry, fullscreen, only_list_of_vm, one_vm, no_cert_check, nx_options); */
+
+  return result;
 }
