@@ -2,20 +2,23 @@
 # Skip a lot of auto rules that aply to gnu make
 CC=gcc
 LD=gcc
+QVDCLIENTLIBA=libqvdclient.a
 QVDCLIENTLIB=libqvdclient.so
 SOURCE=qvdclientcore.c debug.c qvdbuffer.c qvdvm.c
-OBJ=qvdclientcore.o debug.o qvdbuffer.o qvdvm.o /usr/local/lib/libcurl.a
+OBJ=qvdclientcore.o debug.o qvdbuffer.o qvdvm.o
 QVDCLIENT=qvdclient
 QVDCLIENTOBJ=$(QVDCLIENT).o
-QVDCLIENTLIBLIBS=-L/usr/local/lib -L. -lcrypto -lssl -lldap -lidn -lrt -ljansson -lXcomp
-QVDCLIENTLIBS=-L/usr/local/lib -L. -lqvdclient
-CFLAGS=-fPIC -g -I/usr/local/include
+QVDCLIENTLIBLIBS=-L. -lcrypto -lssl -lldap -lidn -lrt -ljansson -lXcomp
+#QVDCLIENTLIBLIBS=-L/usr/local/lib -L. -lcrypto -lssl -lldap -lidn -lrt -ljansson -lXcomp
+#QVDCLIENTLIBS=-L/usr/local/lib -L. -lqvdclientt
+QVDCLIENTLIBS=-L. -lqvdclient -lcurl
+CFLAGS=-fPIC -g 
 STATICLIBS=
 STDCLIB=
 
 default: all
 
-all: $(QVDCLIENTLIB) $(QVDCLIENT)
+all: $(QVDCLIENTLIB) $(QVDCLIENTLIBA) $(QVDCLIENT) 
 
 android:
 	$(eval LIBDIR:=../android/target)
@@ -37,10 +40,13 @@ android:
 
 
 qvdclient: $(QVDCLIENTOBJ) $(QVDCLIENTLIB)
-	$(LD) -fPIC  -o $(QVDCLIENT) $(QVDCLIENTLIBS) $(QVDCLIENTOBJ)
+	$(LD) -fPIC  -o $(QVDCLIENT) $(QVDCLIENTOBJ) $(QVDCLIENTLIBS)
 
 $(QVDCLIENTLIB): $(OBJ)
 	$(LD) -shared -o $(QVDCLIENTLIB) $(OBJ) $(QVDCLIENTLIBLIBS)
+
+$(QVDCLIENTLIBA): $(OBJ)
+	ar cru $(QVDCLIENTLIBA) $(OBJ)
 
 # These two are for android
 $(STDCLIB): $(LIBSTDC)
@@ -56,6 +62,6 @@ clean:
 	rm -f *~ *.o
 
 distclean: clean
-	rm -rf $(QVDCLIENTLIB) $(QVDCLIENT) core lib*
+	rm -rf $(QVDCLIENTLIB) $(QVDCLIENTLIBA) $(QVDCLIENT) core lib*
 
 .EXPORT_ALL_VARIABLES:
