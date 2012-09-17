@@ -61,6 +61,6 @@ clean:
 	rm -f *~ *.o
 
 distclean: clean
-	rm -rf $(QVDCLIENTLIB) $(QVDCLIENTLIBA) $(QVDCLIENT) core lib*
+	rm -rf $(QVDCLIENT) core lib*
 
 .EXPORT_ALL_VARIABLES:
