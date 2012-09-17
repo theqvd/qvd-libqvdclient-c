@@ -2,16 +2,15 @@
 # Skip a lot of auto rules that aply to gnu make
 CC=gcc
 LD=gcc
+AR=ar
 QVDCLIENTLIBA=libqvdclient.a
 QVDCLIENTLIB=libqvdclient.so
 SOURCE=qvdclientcore.c debug.c qvdbuffer.c qvdvm.c
 OBJ=qvdclientcore.o debug.o qvdbuffer.o qvdvm.o
 QVDCLIENT=qvdclient
 QVDCLIENTOBJ=$(QVDCLIENT).o
-QVDCLIENTLIBLIBS=-L. -lcrypto -lssl -lldap -lidn -lrt -ljansson -lXcomp
-#QVDCLIENTLIBLIBS=-L/usr/local/lib -L. -lcrypto -lssl -lldap -lidn -lrt -ljansson -lXcomp
-#QVDCLIENTLIBS=-L/usr/local/lib -L. -lqvdclientt
-QVDCLIENTLIBS=-L. -lqvdclient -lcurl
+QVDCLIENTLIBLIBS=-L. -lcurl -lcrypto -lssl -lldap -lidn -lrt -ljansson -lXcomp
+QVDCLIENTLIBS=-L. -lqvdclient
 CFLAGS=-fPIC -g 
 STATICLIBS=
 STDCLIB=
@@ -40,13 +39,13 @@ android:
 
 
 qvdclient: $(QVDCLIENTOBJ) $(QVDCLIENTLIB)
-	$(LD) -fPIC  -o $(QVDCLIENT) $(QVDCLIENTOBJ) $(QVDCLIENTLIBS)
+	$(LD) -o $(QVDCLIENT) $(QVDCLIENTOBJ) $(QVDCLIENTLIBS)
 
 $(QVDCLIENTLIB): $(OBJ)
 	$(LD) -shared -o $(QVDCLIENTLIB) $(OBJ) $(QVDCLIENTLIBLIBS)
 
 $(QVDCLIENTLIBA): $(OBJ)
-	ar cru $(QVDCLIENTLIBA) $(OBJ)
+	$(AR) cru $(QVDCLIENTLIBA) $(OBJ)
 
 # These two are for android
 $(STDCLIB): $(LIBSTDC)
