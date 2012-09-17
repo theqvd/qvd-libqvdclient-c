@@ -142,10 +142,6 @@ int choose_vmid(vmlist *vm)
     }
 }
 
-char *qvd_get_last_error(qvdclient *qvd) {
-  return qvd->error_buffer;
-}
-
 int progress_callback(qvdclient *qvd, const char *message) {
   qvd_printf("Progress Callback: %s", message);
 }
