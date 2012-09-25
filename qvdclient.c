@@ -219,7 +219,7 @@ int main(int argc, char *argv[], char *envp[]) {
 
   /*  printf("********************\n***********************\nSecond connection\n****************\n*****************\nwaiting 60 seconds\n"); */
   /*  sleep(30); */
-  result = qvd_connection(host, port, user, pass, geometry, fullscreen, only_list_of_vm, one_vm, no_cert_check, nx_options);
+  /* result = qvd_connection(host, port, user, pass, geometry, fullscreen, only_list_of_vm, one_vm, no_cert_check, nx_options); */
 
   /* printf("********************\n***********************\nThird connection\n****************\n*****************\nwaiting 60 seconds\n"); */
   /* sleep(10); */
