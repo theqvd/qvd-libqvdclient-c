@@ -79,7 +79,9 @@ void qvd_error(qvdclient *qvd, const char *format, ...)
   _qvd_vprintf(format, args);
   va_end(args);
 
+  va_start(args, format);
   vsnprintf(qvd->error_buffer, MAX_ERROR_BUFFER, format, args);
+  va_end(args);
   qvd->error_buffer[MAX_ERROR_BUFFER-1] = '\0';
 }
 

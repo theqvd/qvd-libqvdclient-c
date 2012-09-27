@@ -2,6 +2,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <limits.h>
+#include <string.h>
 #include "qvdclient.h"
 
 void help(const char *program)
@@ -19,20 +20,22 @@ void help(const char *program)
   printf("  -o : Assume One VM, that is connect always to the first VM (useful for debugging)\n");
   printf("  -n : No strict certificate checking, always accept certificate\n");
   printf("  -x : NX client options. Example: nx/nx,data=0,delta=0,cache=16384,pack=0:0\n");
+  printf("  -c : Specify client certificate (PEM), it requires also -k. Example -c $HOME/.qvd/client.crt -k $HOME/.qvd/client.key\n");
+  printf("  -k : Specify client certificate key (PEM), requires -c. Example $HOME/.qvd/client.crt -k $HOME/.qvd/client.key\n");
 }
 
-int parse_params(int argc, char **argv, const char **host, int *port, const char **user, const char **pass, const char **geometry, int *fullscreen, int *only_list_of_vm, int *one_vm, int *no_cert_check, const char **nx_options)
+int parse_params(int argc, char **argv, const char **host, int *port, const char **user, const char **pass, const char **geometry, int *fullscreen, int *only_list_of_vm, int *one_vm, int *no_cert_check, const char **nx_options, const char **client_cert, const char **client_key)
 {
   int opt, error = 0;
   const char *program = argv[0];
   char *endptr;
 
-  while ((opt = getopt(argc, argv, "?dh:p:u:w:g:flonx:")) != -1 )
+  while ((opt = getopt(argc, argv, "?dh:p:u:w:g:flonx:c:k:")) != -1 )
     {
       switch (opt)
 	{
 	case '?':
-	  help(program);
+	  error = 1;
 	  break;
 	case 'd':
 	  qvd_set_debug(2);
@@ -71,6 +74,12 @@ int parse_params(int argc, char **argv, const char **host, int *port, const char
 	case 'x':
 	  *nx_options = optarg;
 	  break;
+	case 'c':
+	  *client_cert = optarg;
+	  break;
+	case 'k':
+	  *client_key = optarg;
+	  break;
 	default:
 	  fprintf(stderr, "Parameter not recognized <%c>\n", opt);
 	  error = 1;
@@ -91,13 +100,48 @@ int parse_params(int argc, char **argv, const char **host, int *port, const char
       fprintf(stderr, "The password paramter -w is required\n");
       error = 1;
     }
+
   if (*port < 1 || *port > 65535)
     {
       fprintf(stderr, "The port parameter must be between 1 and 65535\n");
       error = 1;
     }
+
+  if (*client_cert != NULL || *client_key != NULL)
+    {
+
+      if (*client_cert == NULL)
+	{
+	  fprintf(stderr, "If you specify -k then you must specify also -c\n");
+	  error = 1;
+	}
+      else
+	{
+	  if (access(*client_cert, R_OK) != 0)
+	    {
+	      fprintf(stderr, "Cert file %s is not accessible: %s\n", *client_cert, strerror(errno));
+	      error = 1;	      
+	    }
+	}
+      
+      if (*client_key == NULL)
+	{
+	  fprintf(stderr, "If you specify -c then you must specify also -k\n");
+	  error = 1;
+	}
+      else
+	{
+	  if (access(*client_key, R_OK) != 0)
+	    {
+	      fprintf(stderr, "key file %s is not accessible: %s\n", *client_key, strerror(errno));
+	      error = 1;	      
+	    }
+	}
+    }
+
   if (error)
     help(program);
+
   return error;
 }
 
@@ -117,6 +161,14 @@ int accept_unknown_cert_callback(qvdclient *qvd, const char *cert_pem_str, const
 }
 
 
+void print_vmids(vmlist *vm)
+{
+  vmlist *ptr;
+  printf("List of vms:\n");
+  for (ptr=vm; ptr != NULL; ptr = ptr->next)
+    printf("VM ID:%d NAME:%s STATE:%s BLOCKED:%d\n", 
+	   ptr->data->id, ptr->data->name, ptr->data->state, ptr->data->blocked);
+}
 int choose_vmid(vmlist *vm)
 {
   int vm_id = -1;
@@ -124,10 +176,8 @@ int choose_vmid(vmlist *vm)
 
   while (vm_id == -1)
     {
-      printf("List of vms:\n");
-      for (ptr=vm; ptr != NULL; ptr = ptr->next)
-	  printf("VM ID:%d NAME:%s STATE:%s BLOCKED:%d\n", 
-		 ptr->data->id, ptr->data->name, ptr->data->state, ptr->data->blocked);
+      print_vmids(vm);
+
       printf("Choose vmid: ");
       scanf("%d", &vm_id);
       for (ptr=vm; ptr != NULL; ptr = ptr->next)
@@ -143,11 +193,11 @@ int choose_vmid(vmlist *vm)
 }
 
 int progress_callback(qvdclient *qvd, const char *message) {
-  qvd_printf("Progress Callback: %s", message);
+  qvd_printf("Progress Callback: %s\n", message);
 }
 
 
-int qvd_connection(const char *host, int port, const char *user, const char *pass, const char *geometry, int fullscreen, int only_list_of_vm, int one_vm, int no_cert_check, const char *nx_options) {
+int qvd_connection(const char *host, int port, const char *user, const char *pass, const char *geometry, int fullscreen, int only_list_of_vm, int one_vm, int no_cert_check, const char *nx_options, const char *client_cert, const char *client_key) {
   int vm_id;
   qvdclient *qvd;
 
@@ -163,10 +213,11 @@ int qvd_connection(const char *host, int port, const char *user, const char *pas
   if (nx_options)
     qvd_set_nx_options(qvd, nx_options);
 
+  qvd_set_cert_files(qvd, client_cert, client_key);
+
   qvd_set_unknown_cert_callback(qvd, accept_unknown_cert_callback);
   qvd_set_progress_callback(qvd, progress_callback);
 
-  /* TODO check unknown password, currently it returns NULL */
   if (qvd_list_of_vm(qvd) == NULL)
     {
       printf("Error fetching vm for user %s in host %s: %s\n", user, host, qvd->error_buffer);
@@ -179,6 +230,14 @@ int qvd_connection(const char *host, int port, const char *user, const char *pas
       qvd_free(qvd);
       return 2;
     }
+
+  if (only_list_of_vm)
+    {
+      print_vmids(qvd->vmlist);
+      printf("No more acctions, -l has been specified\n");
+      return 0;
+    }
+
 
   if (one_vm || qvd->numvms == 1)
     {
@@ -194,11 +253,6 @@ int qvd_connection(const char *host, int port, const char *user, const char *pas
       printf("Error choosing vm_id: %d\n", vm_id);
       return 6;
     }
-  if (only_list_of_vm)
-    {
-      printf("No more acctions, -l has been specified\n");
-      return 0;
-    }
 
   qvd_connect_to_vm(qvd, vm_id);
   printf("after qvd_connect_to_vm\n");
@@ -209,21 +263,13 @@ int qvd_connection(const char *host, int port, const char *user, const char *pas
 }
 
 int main(int argc, char *argv[], char *envp[]) {
-  const char *host = NULL, *user = NULL, *pass = NULL, *geometry = NULL, *nx_options = NULL;
+  const char *host = NULL, *user = NULL, *pass = NULL, *geometry = NULL, *nx_options = NULL, *cert_file = NULL, *key_file = NULL;
   int port = 8443, fullscreen=0, only_list_of_vm=0, one_vm=0, no_cert_check=0;
   int result, vm_id;
-  if (parse_params(argc, argv, &host, &port, &user, &pass, &geometry, &fullscreen, &only_list_of_vm, &one_vm, &no_cert_check, &nx_options))
+  if (parse_params(argc, argv, &host, &port, &user, &pass, &geometry, &fullscreen, &only_list_of_vm, &one_vm, &no_cert_check, &nx_options, &cert_file, &key_file))
     return 1;
 
-  result = qvd_connection(host, port, user, pass, geometry, fullscreen, only_list_of_vm, one_vm, no_cert_check, nx_options);
-
-  /*  printf("********************\n***********************\nSecond connection\n****************\n*****************\nwaiting 60 seconds\n"); */
-  /*  sleep(30); */
-  /* result = qvd_connection(host, port, user, pass, geometry, fullscreen, only_list_of_vm, one_vm, no_cert_check, nx_options); */
-
-  /* printf("********************\n***********************\nThird connection\n****************\n*****************\nwaiting 60 seconds\n"); */
-  /* sleep(10); */
-  /* result = qvd_connection(host, port, user, pass, geometry, fullscreen, only_list_of_vm, one_vm, no_cert_check, nx_options); */
+  result = qvd_connection(host, port, user, pass, geometry, fullscreen, only_list_of_vm, one_vm, no_cert_check, nx_options, cert_file, key_file);
 
   return result;
 }

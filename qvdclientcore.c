@@ -39,11 +39,12 @@ CURLcode _qvd_sslctxfun(CURL *curl, SSL_CTX *sslctx, void *parm);
 int _qvd_set_base64_auth(qvdclient *qvd);
 int _qvd_switch_protocols(qvdclient *qvd, int id);
 void _qvd_print_environ();
+int _qvd_use_client_cert(qvdclient *qvd);
 
 /* Init and free functions */
 qvdclient *qvd_init(const char *hostname, const int port, const char *username, const char *password) {
   qvdclient *qvd;
-  qvd_printf("Starting qvd_init. QVD Version: <%s>. Curl Version: <%s>, Openssl version: <%s>", ABOUT, curl_version(), OPENSSL_VERSION_TEXT);
+  qvd_printf("Starting qvd_init. QVD Version: <%s>. Curl Version: <%s>, Openssl version: <%s>\n", ABOUT, curl_version(), OPENSSL_VERSION_TEXT);
   if (strlen(username) + strlen(password) + 2 > MAX_USERPWD) {
     qvd_error(qvd, "Length of username and password + 2 is longer than %d\n", MAX_USERPWD);
     return NULL;
@@ -75,6 +76,7 @@ qvdclient *qvd_init(const char *hostname, const int port, const char *username, 
     free(qvd);
     return NULL;
   }
+
   if (snprintf(qvd->useragent, MAX_USERAGENT, "%s %s", DEFAULT_USERAGENT_PRODUCT, curl_version()) >= MAX_USERAGENT) {
     qvd_error(qvd, "Error initializing useragent (string too long)\n");
     free(qvd);
@@ -110,6 +112,7 @@ qvdclient *qvd_init(const char *hostname, const int port, const char *username, 
   curl_easy_setopt(qvd->curl, CURLOPT_WRITEFUNCTION, _qvd_write_buffer_callback);
   curl_easy_setopt(qvd->curl, CURLOPT_WRITEDATA, &(qvd->buffer));
   curl_easy_setopt(qvd->curl, CURLOPT_USERAGENT, qvd->useragent);
+  /* If client certificate CURLOPT_SSLCERT , CURLOPT_SSLKEY, CURLOPT_SSLCERTTYPE "PEM" */
   /* Copy parameters */
   strncpy(qvd->hostname, hostname, MAX_BASEURL);
   qvd->hostname[MAX_BASEURL - 1] = '\0';
@@ -118,6 +121,9 @@ qvdclient *qvd_init(const char *hostname, const int port, const char *username, 
   qvd->username[MAX_USERPWD - 1] = '\0';
   strncpy(qvd->password, password, MAX_USERPWD);
   qvd->password[MAX_USERPWD - 1] = '\0';
+  strncpy(qvd->client_cert, "", MAX_PATH_STRING);
+  strncpy(qvd->client_key, "", MAX_PATH_STRING);
+  qvd->use_client_cert = 0;
   qvd->numvms = 0;
   qvd_set_link(qvd, DEFAULT_LINK);
   qvd_set_geometry(qvd, DEFAULT_GEOMETRY);
@@ -146,7 +152,7 @@ qvdclient *qvd_init(const char *hostname, const int port, const char *username, 
 }
 
 void qvd_free(qvdclient *qvd) {
-  qvd_printf("Calling qvd_free");
+  qvd_printf("Calling qvd_free\n");
   curl_easy_cleanup(qvd->curl);
   QvdVmListFree(qvd->vmlist);
   /* nx_options should be null */
@@ -162,7 +168,7 @@ vmlist *qvd_list_of_vm(qvdclient *qvd) {
   char *command = "/qvd/list_of_vm";
 
   if (qvd->home && (*(qvd->home)) != '\0') {
-    qvd_printf("Setting NX_HOME to %s", qvd->home);
+    qvd_printf("Setting NX_HOME to %s\n", qvd->home);
     if (setenv("NX_HOME", qvd->home, 1)) {
       qvd_error(qvd, "Error setting NX_HOME to %s. errno: %d (%s)", qvd->home, errno, strerror(errno));
     }
@@ -177,13 +183,15 @@ vmlist *qvd_list_of_vm(qvdclient *qvd) {
     return NULL;
   }
 
+  _qvd_use_client_cert(qvd);
   curl_easy_setopt(qvd->curl, CURLOPT_URL, url);
   /*  curl_easy_setopt(curl, CURLOPT_WRITEDATA, &jsonBuffer); */
   qvd->res = curl_easy_perform(qvd->curl);
   qvd_printf("After easy_perform: %ul\n", qvd->res);
   if (qvd->res)
     {
-      qvd_printf("An error ocurred getting url <%s>: %ul\n", url, qvd->res);
+      qvd_printf("Error accessing url: <%s>, error code: %ul\n", url, qvd->res);
+      qvd_error(qvd, "Error accessing list of VMs: %s\n", curl_easy_strerror(qvd->res));
       return NULL;
     }
   
@@ -237,13 +245,13 @@ int qvd_connect_to_vm(qvdclient *qvd, int id)
 
   qvd_printf("qvd_connect_to_vm(%p,%d)", qvd, id);
   if (qvd->display && (*(qvd->display)) != '\0') {
-    qvd_printf("Setting DISPLAY to %s", qvd->display);
+    qvd_printf("Setting DISPLAY to %s\n", qvd->display);
     if (setenv("DISPLAY", qvd->display, 1)) {
       qvd_error(qvd, "Error setting DISPLAY to %s. errno: %d (%s)", qvd->display, errno, strerror(errno));
     }
   }
   if (qvd->home && (*(qvd->home)) != '\0') {
-    qvd_printf("Setting NX_HOME to %s", qvd->home);
+    qvd_printf("Setting NX_HOME to %s\n", qvd->home);
     if (setenv("NX_HOME", qvd->home, 1)) {
       qvd_error(qvd, "Error setting NX_HOME to %s. errno: %d (%s)", qvd->home, errno, strerror(errno));
     }
@@ -299,8 +307,8 @@ void qvd_set_display(qvdclient *qvd, const char *display) {
 }
 
 void qvd_set_home(qvdclient *qvd, const char *home) {
-  strncpy(qvd->home, home, MAXHOMESTRING);
-  qvd->home[MAXHOMESTRING - 1] = '\0';
+  strncpy(qvd->home, home, MAX_PATH_STRING);
+  qvd->home[MAX_PATH_STRING - 1] = '\0';
 }
 
 char *qvd_get_last_error(qvdclient *qvd) {
@@ -340,7 +348,7 @@ void qvd_set_unknown_cert_callback(qvdclient *qvd, int (*ssl_verify_callback)(qv
 
 void qvd_set_progress_callback(qvdclient *qvd, int (*progress_callback)(qvdclient *, const char *message))
 {
-  qvd_printf("Setting progress callback");
+  qvd_printf("Setting progress callback\n");
   qvd->progress_callback = progress_callback;
 }
 
@@ -384,14 +392,14 @@ int _qvd_set_certdir(qvdclient *qvd)
   if (!_qvd_create_dir(qvd, home, CERT_DIR))
     return 0;
 
-  snprintf(qvd->certpath, MAXCERTSTRING, "%s/%s", home, CERT_DIR);
-  qvd->certpath[MAXCERTSTRING] = '\0';
-  if (strlen(qvd->certpath) == MAXCERTSTRING)
+  snprintf(qvd->certpath, MAX_PATH_STRING, "%s/%s", home, CERT_DIR);
+  qvd->certpath[MAX_PATH_STRING] = '\0';
+  if (strlen(qvd->certpath) == MAX_PATH_STRING)
     {
-      qvd_error(qvd, "Cert string too long (%d) recompile program. Path is %s", MAXCERTSTRING, qvd->certpath);
+      qvd_error(qvd, "Cert string too long (%d) recompile program. Path is %s", MAX_PATH_STRING, qvd->certpath);
       return 0;
     }
-  qvd_printf("Setting cert path to %s", qvd->certpath);
+  qvd_printf("Setting cert path to %s\n", qvd->certpath);
   curl_easy_setopt(qvd->curl, CURLOPT_CAPATH, qvd->certpath);
   return 1;
 }
@@ -648,6 +656,8 @@ int _qvd_switch_protocols(qvdclient *qvd, int id)
   char url[MAX_BASEURL];
   char base64auth[MAX_PARAM];
   char *ptr, *content;
+
+  _qvd_use_client_cert(qvd);
   curl_easy_setopt(qvd->curl, CURLOPT_URL, qvd->baseurl);
   curl_easy_setopt(qvd->curl, CURLOPT_CONNECT_ONLY, 1L);
   curl_easy_perform(qvd->curl);
@@ -795,11 +805,11 @@ long certificate_error[MAX_CERTS];
 
 int _qvd_create_dir(qvdclient *qvd, const char *home, const char *subdir)
 {
-  char path[MAXCERTSTRING];
+  char path[MAX_PATH_STRING];
   struct stat fs_stat;
   int result;
-  snprintf(path, MAXCERTSTRING - 1, "%s/%s", home, subdir);
-  path[MAXCERTSTRING - 1] = '\0';
+  snprintf(path, MAX_PATH_STRING - 1, "%s/%s", home, subdir);
+  path[MAX_PATH_STRING - 1] = '\0';
   result = stat(path, &fs_stat);
   if (result == -1)
     {
@@ -825,14 +835,14 @@ int _qvd_create_dir(qvdclient *qvd, const char *home, const char *subdir)
 }
 int _qvd_save_certificate(qvdclient *qvd, X509 *cert, int depth, BUF_MEM *biomem)
 {
-  char path[MAXCERTSTRING];
+  char path[MAX_PATH_STRING];
 
   int fd, result;
-  snprintf(path, MAXCERTSTRING - 1, "%s/%lx.%d", qvd->certpath, X509_subject_name_hash(cert), depth);
-  path[MAXCERTSTRING - 1] = '\0';
-  if (strlen(path) == MAXCERTSTRING)
+  snprintf(path, MAX_PATH_STRING - 1, "%s/%lx.%d", qvd->certpath, X509_subject_name_hash(cert), depth);
+  path[MAX_PATH_STRING - 1] = '\0';
+  if (strlen(path) == MAX_PATH_STRING)
     {
-      qvd_error(qvd, "Cert string too long (%d) recompile program. Path is %s", MAXCERTSTRING, path);
+      qvd_error(qvd, "Cert string too long (%d) recompile program. Path is %s", MAX_PATH_STRING, path);
       return 0;
     }
 
@@ -942,3 +952,59 @@ CURLcode _qvd_sslctxfun(CURL *curl, SSL_CTX *sslctx, void *parm)
   return CURLE_OK;
 } 
 
+/* 
+ * Returns 1 if client certificates are used and 0 otherwise
+ */
+int _qvd_use_client_cert(qvdclient *qvd)
+{
+  if (qvd->use_client_cert == 0)
+    {
+      qvd_printf("No client certificates used\n");
+      return 0;
+    }
+
+
+  qvd_printf("Using client certificates cert: <%s>, key <%s>\n", qvd->client_cert, qvd->client_key);
+  curl_easy_setopt(qvd->curl, CURLOPT_SSLCERT, qvd->client_cert);
+  curl_easy_setopt(qvd->curl, CURLOPT_SSLKEY, qvd->client_key);
+  /*  curl_easy_setopt(qvd->curl, CURLOPT_KEYPASSWD, "");*/
+  return 1;
+}
+
+
+
+void qvd_set_cert_files(qvdclient *qvd, const char *client_cert, const char *client_key)
+{
+  if (client_cert == NULL || client_key == NULL)
+    {
+      qvd_printf("Disabling client certificate\n");
+      qvd->use_client_cert = 0;
+      return;
+    }
+
+  if (access(client_cert, R_OK) != 0)
+    {
+      qvd_error(qvd, "Cert file %s is not accessible: %s\n", client_cert, strerror(errno));
+      qvd->use_client_cert = 0;
+      return;
+    }
+
+  if (access(client_key, R_OK) != 0)
+    {
+      qvd_error(qvd, "Key file %s is not accessible: %s\n", client_key, strerror(errno));
+      qvd->use_client_cert = 0;
+      return;
+    }
+
+  strncpy(qvd->client_cert, client_cert, MAX_PATH_STRING);
+  qvd->client_cert[MAX_PATH_STRING - 1] = '\0';
+
+  strncpy(qvd->client_key, client_key, MAX_PATH_STRING);
+  qvd->client_key[MAX_PATH_STRING - 1] = '\0';
+
+  qvd->use_client_cert = 1;
+
+  qvd_printf("Setting client_cert to <%s> and client_key to <%s> and enabling client certificate send", qvd->client_cert, qvd->client_key);
+
+  return;
+}

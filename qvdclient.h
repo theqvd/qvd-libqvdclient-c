@@ -23,7 +23,7 @@
 #define MAX_PARAM 32
 #define MAX_ERROR_BUFFER 256
 #define MAXDISPLAYSTRING 256
-#define MAXHOMESTRING 128
+#define MAX_PATH_STRING 256
 #define MAX_HTTP_RESPONSES_FOR_UPGRADE 10
 #define DEFAULT_USERAGENT_PRODUCT "QVD/3.1"
 #define MAX_USERAGENT 128
@@ -33,7 +33,6 @@
 #define DEFAULT_GEOMETRY "800x600"
 #define MAX_LINK 128
 #define DEFAULT_LINK "adsl"
-#define MAXCERTSTRING 256
 #define HOME_ENV "HOME"
 #define APPDATA_ENV "APPDATA"
 #define CONF_DIR ".qvd"
@@ -80,8 +79,8 @@ struct qvdclientstruct {
   int print_enabled;
   int fullscreen;
   char display[MAXDISPLAYSTRING];
-  char home[MAXHOMESTRING];
-  char certpath[MAXCERTSTRING];
+  char home[MAX_PATH_STRING];
+  char certpath[MAX_PATH_STRING];
   char useragent[MAX_USERAGENT];
   int ssl_no_cert_check;
   int (*ssl_verify_callback)(struct qvdclientstruct *qvd, const char *cert_pem_str, const char *cert_pem_data);
@@ -89,6 +88,9 @@ struct qvdclientstruct {
   /* You can use userdata for the ssl_verify_callback for example */
   void *userdata;
   char *nx_options;
+  int use_client_cert;
+  char client_cert[MAX_PATH_STRING]; /* PEM format */
+  char client_key[MAX_PATH_STRING];
 } ;
 typedef struct qvdclientstruct qvdclient;
 
@@ -111,6 +113,7 @@ void qvd_set_strict_cert_check(qvdclient *qvd);
 void qvd_set_unknown_cert_callback(qvdclient *qvd, int (*ssl_verify_callback)(qvdclient *, const char *cert_pem_str, const char *cert_pem_data));
 void qvd_set_progress_callback(qvdclient *qvd, int (*progress_callback)(qvdclient *, const char *message));
 void qvd_set_nx_options(qvdclient *qvd, const char *nx_options);
+void qvd_set_cert_files(qvdclient *qvd, const char *client_cert, const char *client_key);
 char *qvd_get_last_error(qvdclient *qvd);
 
 int qvd_curl_debug_callback(CURL *handle, curl_infotype type,
