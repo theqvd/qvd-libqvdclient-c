@@ -39,9 +39,12 @@
 #define CERT_DIR ".qvd/certs"
 #define MAX_NX_OPTS_BUFFER 256
 
-/* the buffer size is 32K */
+#ifndef MAX
 #define MAX(x,y) ((x) > (y) ? (x) : (y))
+#endif
+#ifndef MIN
 #define MIN(x,y) ((x) < (y) ? (x) : (y))
+#endif
 /* #define TRACE */
 
 typedef struct {
