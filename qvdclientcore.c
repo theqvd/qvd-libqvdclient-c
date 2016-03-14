@@ -847,6 +847,7 @@ int _qvd_switch_protocols(qvdclient *qvd, int id)
   char url[MAX_BASEURL];
   char base64auth[MAX_PARAM];
   char *ptr, *content;
+  time_t start_time;
 
   _qvd_use_client_cert(qvd);
   curl_easy_setopt(qvd->curl, CURLOPT_URL, qvd->baseurl);
@@ -864,21 +865,32 @@ int _qvd_switch_protocols(qvdclient *qvd, int id)
    * Example url
    * char *url = "GET /qvd/connect_to_vm?id=1&qvd.client.os=linux&qvd.client.fullscreen=&qvd.client.geometry=800x600&qvd.client.link=local&qvd.client.keyboard=pc105%2Fus&qvd.client.printing.enabled=0 HTTP/1.1\nAuthorization: Basic bml0bzpuaXRv\nConnection: Upgrade\nUpgrade: QVD/1.0\n\n";
    */
+  /* FIXME: handle CURLE_AGAIN */
   if ((qvd->res = curl_easy_send(qvd->curl, url, strlen(url) , &bytes_sent )) != CURLE_OK ) {
     qvd_error(qvd, "An error ocurred in first curl_easy_send: %ul <%s>\n", qvd->res, curl_easy_strerror(qvd->res));
     return 1;
   }
 
   /* TODO perhaps put this in another func ??? */
+  time(&start_time);
 
   FD_ZERO(&myset);
   FD_ZERO(&zero);
   FD_SET(socket, &myset);
   qvd_printf("Before select on send socket is: %d\n", socket);
-  for (i=0; i<MAX_HTTP_RESPONSES_FOR_UPGRADE; ++i) {
-    /* TODO define timeouts perhaps in qvd_init */
-    select(socket+1, &myset, &zero, &zero, NULL);
-    if ((qvd->res = curl_easy_recv(qvd->curl, qvd->buffer.data, BUFFER_SIZE, &bytes_received)) != CURLE_OK ) {
+  while (1) {
+    struct timeval timeout = { 1, 0, };
+    time_t now;
+    time(&now);
+    if (now > end_time + 600) {
+        qvd_error(qvd, "Timeout while waiting for remote desktop to come up");
+        return 2;
+    }
+
+    select(socket+1, &myset, &zero, &zero, &timeout);
+    qvd->res = curl_easy_recv(qvd->curl, qvd->buffer.data, BUFFER_SIZE, &bytes_received);
+    if (qvd->res != CURLE_OK) {
+      if (qvd->res == CURLE_AGAIN) continue;
       qvd_error(qvd, "An error ocurred in curl_easy_recv: %ul <%s>\n", qvd->res, curl_easy_strerror(qvd->res));
       return 2;
     }
@@ -964,10 +976,6 @@ V/qvd     ( 7551): 1 input received was <The requested virtual machine is offlin
       }
     }
 
-  }
-  if (i >=10 ) {
-    qvd_error(qvd, "Error not received response for protocol upgrade in %d tries http/1.1\n", i);
-    return 3;
   }
 
   return 0;
