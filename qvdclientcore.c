@@ -882,7 +882,7 @@ int _qvd_switch_protocols(qvdclient *qvd, int id)
     struct timeval timeout = { 1, 0, };
     time_t now;
     time(&now);
-    if (now > end_time + 600) {
+    if (now > start_time + 600) {
         qvd_error(qvd, "Timeout while waiting for remote desktop to come up");
         return 2;
     }
