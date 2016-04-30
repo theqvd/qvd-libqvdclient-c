@@ -5,8 +5,7 @@
  *
  * libqvdclient is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
+ * the Free Software Foundation, either version 2 of the License.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -27,9 +26,10 @@
 /* #define BUFFER_SIZE CURL_MAX_WRITE_SIZE * 2 */
 #define BUFFER_SIZE 65536
 #include "qvdbuffer.h"
-#define QVDVERSION 121
-#define QVDABOUT "Version: 1.2.1. $Id$"
-#define QVDCHANGELOG "1.2.1 26/08/2015 Use ASL logging for Apple, openssl: 1.0.2d, jansson: 2.7\n" \
+#define QVDVERSION 122
+#define QVDABOUT "Version: 1.2.2. $Id$"
+#define QVDCHANGELOG "1.2.2 30/04/2016 Change license to GPLv2\n" \
+                     "1.2.1 26/08/2015 Use ASL logging for Apple, openssl: 1.0.2d, jansson: 2.7\n" \
                      "1.2.0 07/05/2015 Improve Select on write file descriptors\n" \
                      "1.1.9 06/05/2015 Use NXTransCleanupForReconnect for IOS\n" \
                      "1.1.8 06/05/2015 Include nxcomp version in the -v flag\n" \
