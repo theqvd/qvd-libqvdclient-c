@@ -26,9 +26,10 @@
 /* #define BUFFER_SIZE CURL_MAX_WRITE_SIZE * 2 */
 #define BUFFER_SIZE 65536
 #include "qvdbuffer.h"
-#define QVDVERSION 122
-#define QVDABOUT "Version: 1.2.2. $Id$"
-#define QVDCHANGELOG "1.2.2 30/04/2016 Change license to GPLv2\n" \
+#define QVDVERSION 123
+#define QVDABOUT "Version: 1.2.3. $Id$"
+#define QVDCHANGELOG "1.2.3 30/04/2016 Allow to preselect VM\n" \
+                     "1.2.2 30/04/2016 Change license to GPLv2\n" \
                      "1.2.1 26/08/2015 Use ASL logging for Apple, openssl: 1.0.2d, jansson: 2.7\n" \
                      "1.2.0 07/05/2015 Improve Select on write file descriptors\n" \
                      "1.1.9 06/05/2015 Use NXTransCleanupForReconnect for IOS\n" \

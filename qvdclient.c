@@ -27,7 +27,7 @@
 
 void help(const char *program)
 {
-  printf("%s [-?] [-d] -h host [-p port] -u username -w pass [-g wxh] [-f] \n\n"
+  printf("%s [-?] [-d] -h host [-p port] -u username -w pass [-g wxh] [-f] [-s n]\n\n"
          "  -? : shows this help\n"
          "  -v : shows version and exits\n"
 	 "  -d : Enables debugging\n"
@@ -44,10 +44,12 @@ void help(const char *program)
 	 "  -o : Assume One VM, that is connect always to the first VM (useful for debugging)\n"
 	 "  -n : No strict certificate checking, always accept certificate\n"
 	 "  -x : NX client options. Example: nx/nx,data=0,delta=0,cache=16384,pack=0:0\n"
+	 "       Example: nx/nx,media=4713,cups=631,limit=5m,images=268435456,cache=67108864:0"
 	 "  -c : Specify client certificate (PEM), it requires also -k. Example -c $HOME/.qvd/client.crt -k $HOME/.qvd/client.key\n"
 	 "  -k : Specify client certificate key (PEM), requires -c. Example $HOME/.qvd/client.crt -k $HOME/.qvd/client.key\n"
 	 "  -r : Restart session. That is stop the VM before issuing a vm_connect\n"
 	 "  -2 : Specify to reconnect after the connection has finished. This is for testing only.\n"
+	 "  -s : Select the specific vm id. Usually used for testing."
 	 "\n"
 	 "Environment variables:\n"
 	 "  %s : Specifies the host to connect to, if not specified with -h\n"
@@ -67,7 +69,7 @@ void help(const char *program)
 	 );
 }
 
-int parse_params(int argc, char **argv, const char **host, int *port, const char **user, const char **pass, const char **geometry, int *fullscreen, int *only_list_of_vm, int *one_vm, int *no_cert_check, int *restart_session, const char **nx_options, const char **client_cert, const char **client_key, int *twice)
+int parse_params(int argc, char **argv, const char **host, int *port, const char **user, const char **pass, const char **geometry, int *fullscreen, int *only_list_of_vm, int *one_vm, int *no_cert_check, int *restart_session, const char **nx_options, const char **client_cert, const char **client_key, int *twice, int *preselectedvm)
 {
   int opt, error = 0, version = 0;
   const char *program = argv[0];
@@ -77,7 +79,7 @@ int parse_params(int argc, char **argv, const char **host, int *port, const char
   *user = getenv(QVDLOGIN_ENV);
   *pass = getenv(QVDPASSWORD_ENV);
 
-  while ((opt = getopt(argc, argv, "?dvrh:p:u:w:g:flonx:c:k:2")) != -1 )
+  while ((opt = getopt(argc, argv, "?dvrh:p:u:w:g:flonx:c:k:2s:")) != -1 )
     {
       switch (opt)
 	{
@@ -135,6 +137,15 @@ int parse_params(int argc, char **argv, const char **host, int *port, const char
           break;
         case '2':
           *twice = 1;
+          break;
+        case 's':
+          *preselectedvm = (int) strtol(optarg, &endptr, 10);
+	  if ((errno == ERANGE && (*preselectedvm == LONG_MAX || *preselectedvm == LONG_MIN))
+	      || optarg == endptr)
+	    {
+	      fprintf(stderr, "Ignoring preselected parameter -s, unable to parse <%s>\n", optarg);
+	      *preselectedvm = 0;
+	    }
           break;
 	default:
 	  fprintf(stderr, "Parameter not recognized <%c>\n", opt);
@@ -272,7 +283,7 @@ int _set_display_if_not_set(qvdclient *qvd) {
   return 0;
 }
 
-int qvd_connection(const char *host, int port, const char *user, const char *pass, const char *geometry, int fullscreen, int only_list_of_vm, int one_vm, int no_cert_check, int restart_session, const char *nx_options, const char *client_cert, const char *client_key) {
+int qvd_connection(const char *host, int port, const char *user, const char *pass, const char *geometry, int fullscreen, int only_list_of_vm, int one_vm, int no_cert_check, int restart_session, const char *nx_options, const char *client_cert, const char *client_key, int preselectedvm) {
   int vm_id;
   qvdclient *qvd;
 
@@ -314,10 +325,18 @@ int qvd_connection(const char *host, int port, const char *user, const char *pas
     }
 
 
-  if (one_vm || qvd->numvms == 1)
+  if (one_vm || qvd->numvms == 1 || preselectedvm)
     {
-      vm_id = qvd->vmlist->data->id;
-      printf("Connecting to the first vm: vm_id %d\n", vm_id);
+      if (preselectedvm)
+	{
+	  vm_id = preselectedvm;
+	  printf("Connecting to preselected vm: vm_id %d\n", vm_id);
+	}
+      else
+	{
+	  vm_id = qvd->vmlist->data->id;
+	  printf("Connecting to the first vm: vm_id %d\n", vm_id);
+	}
     }
   else
     {
@@ -345,16 +364,16 @@ int qvd_connection(const char *host, int port, const char *user, const char *pas
 
 int main(int argc, char *argv[], char *envp[]) {
   const char *host = NULL, *user = NULL, *pass = NULL, *geometry = NULL, *nx_options = NULL, *cert_file = NULL, *key_file = NULL;
-  int port = 8443, fullscreen=0, only_list_of_vm=0, one_vm=0, no_cert_check=0, restart_session = 0, twice = 0;
+  int port = 8443, fullscreen=0, only_list_of_vm=0, one_vm=0, no_cert_check=0, restart_session = 0, twice = 0, preselectedvm=0;
   int result, vm_id;
   signal(SIGPIPE, SIG_IGN);
-  if (parse_params(argc, argv, &host, &port, &user, &pass, &geometry, &fullscreen, &only_list_of_vm, &one_vm, &no_cert_check, &restart_session, &nx_options, &cert_file, &key_file, &twice))
+  if (parse_params(argc, argv, &host, &port, &user, &pass, &geometry, &fullscreen, &only_list_of_vm, &one_vm, &no_cert_check, &restart_session, &nx_options, &cert_file, &key_file, &twice, &preselectedvm))
     return 1;
 
-  result = qvd_connection(host, port, user, pass, geometry, fullscreen, only_list_of_vm, one_vm, no_cert_check, restart_session, nx_options, cert_file, key_file);
+  result = qvd_connection(host, port, user, pass, geometry, fullscreen, only_list_of_vm, one_vm, no_cert_check, restart_session, nx_options, cert_file, key_file, preselectedvm);
   if (twice) {
     printf("Two connections requested. Result of first connection was %d\n", result);
-    result = qvd_connection(host, port, user, pass, geometry, fullscreen, only_list_of_vm, one_vm, no_cert_check, restart_session, nx_options, cert_file, key_file);
+    result = qvd_connection(host, port, user, pass, geometry, fullscreen, only_list_of_vm, one_vm, no_cert_check, restart_session, nx_options, cert_file, key_file, preselectedvm);
   }
 
   return result;
