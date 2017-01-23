@@ -71,6 +71,7 @@
 #define APPDATA_ENV "APPDATA"
 #define QVDLOGIN_ENV "QVDLOGIN"
 #define QVDPASSWORD_ENV "QVDPASSWORD"
+#define QVDBEARER_ENV "QVDBEARER"
 #define QVDHOST_ENV "QVDHOST"
 #define CONF_DIR ".qvd"
 #define CERT_DIR ".qvd/certs"
@@ -115,6 +116,8 @@ struct qvdclientstruct {
   char password[MAX_USERPWD];
   char userpwd[MAX_USERPWD];
   char authdigest[MAX_AUTHDIGEST];
+  char bearer[MAX_AUTHDIGEST];
+  int use_bearer;
   char baseurl[MAX_BASEURL];
   int numvms;
   vmlist *vmlist;
@@ -147,7 +150,7 @@ typedef struct qvdclientstruct qvdclient;
 int qvd_get_version(void);
 const char *qvd_get_version_text(void);
 const char *qvd_get_changelog(void);
-qvdclient *qvd_init(const char *hostname, const int port, const char *username, const char *password);
+qvdclient *qvd_init(const char *hostname, const int port, const char *username, const char *password, const char *bearer);
 vmlist *qvd_list_of_vm(qvdclient *qvd);
 int qvd_stop_vm(qvdclient *qvd, int vm);
 int qvd_connect_to_vm(qvdclient *qvd, int id);

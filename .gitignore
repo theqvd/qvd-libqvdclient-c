@@ -57,6 +57,8 @@ configure
 *.so
 *.so.*
 *.status
+# C
+*.o
 
 autom4te.cache
 *.bak

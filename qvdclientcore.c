@@ -63,6 +63,7 @@ int _qvd_set_certdir(qvdclient *qvd);
 int _qvd_dir_exists(qvdclient *qvd, const char *path);
 int _qvd_create_dir(qvdclient *qvd, const char *home, const char *subdir);
 int _qvd_use_client_cert(qvdclient *qvd);
+CURL* _qvd_init_curl(qvdclient *qvd);
 static char qvdversion[MAX_STRING_VERSION];
 
 int qvd_get_version(void) {
@@ -79,13 +80,9 @@ const char *qvd_get_changelog(void) {
 }
 
 /* Init and free functions */
-qvdclient *qvd_init(const char *hostname, const int port, const char *username, const char *password) {
+qvdclient *qvd_init(const char *hostname, const int port, const char *username, const char *password, const char *bearer) {
   qvdclient *qvd;
   qvd_printf("Starting qvd_init. %s", qvd_get_version_text());
-  if (strlen(username) + strlen(password) + 2 > MAX_USERPWD) {
-    qvd_error(qvd, "Length of username and password + 2 is longer than %d\n", MAX_USERPWD);
-    return NULL;
-  }
 
   if (strlen(hostname) + 6 + strlen("https:///") + 2 > MAX_BASEURL) {
     qvd_error(qvd, "Length of hostname and port + scheme  + 2 is longer than %d\n", MAX_BASEURL);
@@ -97,16 +94,40 @@ qvdclient *qvd_init(const char *hostname, const int port, const char *username, 
     return NULL;
   }
 
-  if (snprintf(qvd->userpwd, MAX_USERPWD, "%s:%s", username, password) >= MAX_USERPWD) {
-    qvd_error(qvd, "Error initializing userpwd (string too long)\n");
+  if(username != NULL && password != NULL) {
+  
+    if (snprintf(qvd->userpwd, MAX_USERPWD, "%s:%s", username, password) >= MAX_USERPWD) {
+      qvd_error(qvd, "Error initializing userpwd (string too long)\n");
+      free(qvd);
+      return NULL;
+    }
+    
+    if (strlen(username) + strlen(password) + 2 > MAX_USERPWD) {
+      qvd_error(qvd, "Length of username and password + 2 is longer than %d\n", MAX_USERPWD);
+      return NULL;
+    }
+    
+    qvd->use_bearer = 0;
+    strncpy(qvd->username, username, MAX_USERPWD);
+    qvd->username[MAX_USERPWD - 1] = '\0';
+    strncpy(qvd->password, password, MAX_USERPWD);
+    qvd->password[MAX_USERPWD - 1] = '\0';
+    
+    if (_qvd_set_base64_auth(qvd)) {
+      qvd_error(qvd, "Error initializing authdigest\n");
+      free(qvd);
+      return NULL;
+    }
+    
+  } else if(bearer != NULL) {
+    qvd->use_bearer = 1;
+    strncpy(qvd->bearer, bearer, MAX_AUTHDIGEST);
+    qvd->bearer[MAX_AUTHDIGEST - 1] = '\0';
+  } else {
+    qvd_error(qvd, "No credentials provided\n");
     free(qvd);
     return NULL;
   }
-  if (_qvd_set_base64_auth(qvd)) {
-    qvd_error(qvd, "Error initializing authdigest\n");
-    free(qvd);
-    return NULL;
-    }
 
   if (snprintf(qvd->baseurl, MAX_BASEURL, "https://%s:%d", hostname, port) >= MAX_BASEURL) {
     qvd_error(qvd, "Error initializing baseurl(string too long)\n");
@@ -120,45 +141,17 @@ qvdclient *qvd_init(const char *hostname, const int port, const char *username, 
     return NULL;
   }
 
-  qvd->curl = curl_easy_init();
+  qvd->curl = _qvd_init_curl(qvd);
   if (!qvd->curl) {
     qvd_error(qvd, "Error initializing curl\n");
     free(qvd);
     return NULL;
   }
-  qvd_printf("Curl pointer is %p", qvd->curl);
-  if (get_debug_level()) {
-    curl_easy_setopt(qvd->curl, CURLOPT_VERBOSE, 1L);
-    curl_easy_setopt(qvd->curl, CURLOPT_DEBUGFUNCTION, qvd_curl_debug_callback);
-  }
-
-  curl_easy_setopt(qvd->curl, CURLOPT_ERRORBUFFER, qvd->error_buffer);
-  /* curl_easy_setopt(qvd->curl, CURLOPT_SSL_VERIFYPEER, 1L); */
-  /* curl_easy_setopt(qvd->curl, CURLOPT_SSL_VERIFYHOST, 2L); */
-  curl_easy_setopt(qvd->curl, CURLOPT_CERTINFO, 1L);
-  curl_easy_setopt(qvd->curl, CURLOPT_CAPATH, qvd->certpath);
-  curl_easy_setopt(qvd->curl, CURLOPT_SSL_CTX_FUNCTION, _qvd_sslctxfun);
-  curl_easy_setopt(qvd->curl, CURLOPT_SSL_CTX_DATA, (void *)qvd);
-  /*  curl_easy_setopt(qvd->curl, CURLOPT_CAINFO, NULL);*/
-  _qvd_ssl_index = SSL_CTX_get_ex_new_index(0, (void *)qvd, NULL, NULL, NULL);
-  curl_easy_setopt(qvd->curl, CURLOPT_SSL_VERIFYPEER, 0L);
-  curl_easy_setopt(qvd->curl, CURLOPT_SSL_VERIFYHOST, 0L);
-  curl_easy_setopt(qvd->curl, CURLOPT_TCP_NODELAY, 1L);
-  /*  curl_easy_setopt(qvd->curl, CURLOPT_FAILONERROR, 1L);*/
-  curl_easy_setopt(qvd->curl, CURLOPT_HTTPAUTH, (long)CURLAUTH_BASIC);
-  curl_easy_setopt(qvd->curl, CURLOPT_USERPWD, qvd->userpwd);
-  curl_easy_setopt(qvd->curl, CURLOPT_WRITEFUNCTION, _qvd_write_buffer_callback);
-  curl_easy_setopt(qvd->curl, CURLOPT_WRITEDATA, &(qvd->buffer));
-  curl_easy_setopt(qvd->curl, CURLOPT_USERAGENT, qvd->useragent);
-  /* If client certificate CURLOPT_SSLCERT , CURLOPT_SSLKEY, CURLOPT_SSLCERTTYPE "PEM" */
+  
   /* Copy parameters */
   strncpy(qvd->hostname, hostname, MAX_BASEURL);
   qvd->hostname[MAX_BASEURL - 1] = '\0';
   qvd->port = port;
-  strncpy(qvd->username, username, MAX_USERPWD);
-  qvd->username[MAX_USERPWD - 1] = '\0';
-  strncpy(qvd->password, password, MAX_USERPWD);
-  qvd->password[MAX_USERPWD - 1] = '\0';
   strncpy(qvd->client_cert, "", MAX_PATH_STRING);
   strncpy(qvd->client_key, "", MAX_PATH_STRING);
   qvd->use_client_cert = 0;
@@ -188,6 +181,52 @@ qvdclient *qvd_init(const char *hostname, const int port, const char *username, 
   QvdVmListInit(qvd->vmlist);
 
   return qvd;
+}
+
+CURL* _qvd_init_curl(qvdclient *qvd) {
+
+  CURL* qvd_curl = curl_easy_init();
+  struct curl_slist *chunk = NULL;
+  char auth_header[MAX_AUTHDIGEST];
+
+  if (!qvd_curl) {
+    return NULL;
+  }
+
+  if (get_debug_level()) {
+    curl_easy_setopt(qvd_curl, CURLOPT_VERBOSE, 1L);
+    curl_easy_setopt(qvd_curl, CURLOPT_DEBUGFUNCTION, qvd_curl_debug_callback);
+  }
+
+  curl_easy_setopt(qvd_curl, CURLOPT_ERRORBUFFER, qvd->error_buffer);
+  /* curl_easy_setopt(qvd->curl, CURLOPT_SSL_VERIFYPEER, 1L); */
+  /* curl_easy_setopt(qvd->curl, CURLOPT_SSL_VERIFYHOST, 2L); */
+  curl_easy_setopt(qvd_curl, CURLOPT_CERTINFO, 1L);
+  curl_easy_setopt(qvd_curl, CURLOPT_CAPATH, qvd->certpath);
+  curl_easy_setopt(qvd_curl, CURLOPT_SSL_CTX_FUNCTION, _qvd_sslctxfun);
+  curl_easy_setopt(qvd_curl, CURLOPT_SSL_CTX_DATA, (void *)qvd);
+  /*  curl_easy_setopt(qvd->curl, CURLOPT_CAINFO, NULL);*/
+  _qvd_ssl_index = SSL_CTX_get_ex_new_index(0, (void *)qvd, NULL, NULL, NULL);
+  curl_easy_setopt(qvd_curl, CURLOPT_SSL_VERIFYPEER, 0L);
+  curl_easy_setopt(qvd_curl, CURLOPT_SSL_VERIFYHOST, 0L);
+  curl_easy_setopt(qvd_curl, CURLOPT_TCP_NODELAY, 1L);
+  /*  curl_easy_setopt(qvd->curl, CURLOPT_FAILONERROR, 1L);*/
+  
+  if(qvd->use_bearer) {
+    snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", qvd->bearer);
+    chunk = curl_slist_append(chunk, auth_header);
+    curl_easy_setopt(qvd_curl, CURLOPT_HTTPHEADER, chunk);
+  } else {
+    curl_easy_setopt(qvd_curl, CURLOPT_HTTPAUTH, (long)CURLAUTH_BASIC);
+    curl_easy_setopt(qvd_curl, CURLOPT_USERPWD, qvd->userpwd);
+  }
+
+  curl_easy_setopt(qvd_curl, CURLOPT_WRITEFUNCTION, _qvd_write_buffer_callback);
+  curl_easy_setopt(qvd_curl, CURLOPT_WRITEDATA, &(qvd->buffer));
+  curl_easy_setopt(qvd_curl, CURLOPT_USERAGENT, qvd->useragent);
+  /* If client certificate CURLOPT_SSLCERT , CURLOPT_SSLKEY, CURLOPT_SSLCERTTYPE "PEM" */
+  
+  return qvd_curl;
 }
 
 void qvd_free(qvdclient *qvd) {
@@ -224,16 +263,6 @@ vmlist *qvd_list_of_vm(qvdclient *qvd) {
     qvd_error(qvd, "Error initializing url in list_of_vm, length is longer than %d\n", MAX_BASEURL);
     return NULL;
   }
-
-  struct curl_slist *chunk = NULL;
-  chunk = curl_slist_append(chunk, "Accept:");
-  qvd->res = curl_easy_setopt(qvd->curl, CURLOPT_HTTPHEADER, chunk);
-  if (qvd->res)
-    {
-      qvd_printf("Error deleting Accept headers. Error code: %ul\n", qvd->res);
-      qvd_error(qvd, "Error deleting Accept headers. Error code: %s\n", curl_easy_strerror(qvd->res));
-      return NULL;
-    }
 
   _qvd_use_client_cert(qvd);
   curl_easy_setopt(qvd->curl, CURLOPT_URL, url);
@@ -299,7 +328,7 @@ vmlist *qvd_list_of_vm(qvdclient *qvd) {
   }
   /*  QvdBufferReset(&(qvd->buffer));*/
   if (qvd->numvms <= 0) {
-    qvd_error(qvd, "No virtual machines available for user %s\n", qvd->username);
+    qvd_error(qvd, "No virtual machines available\n");
   } else {
     qvd_progress(qvd, "Returning list of vms");
   }
@@ -853,8 +882,19 @@ int _qvd_switch_protocols(qvdclient *qvd, int id)
   curl_easy_setopt(qvd->curl, CURLOPT_CONNECT_ONLY, 1L);
   curl_easy_perform(qvd->curl);
   curl_easy_getinfo(qvd->curl, CURLINFO_LASTSOCKET, &socket);
+  
+  char auth_method[20];
+  char auth_token[MAX_AUTHDIGEST];
+  if(qvd->use_bearer) {
+    snprintf(auth_method, sizeof(auth_method), "Bearer");
+    strncpy(auth_token, qvd->bearer, sizeof(auth_token));
+  } else {
+    snprintf(auth_method, sizeof(auth_method), "Basic");
+    strncpy(auth_token, qvd->authdigest, sizeof(auth_token));
+  }
 
-  if (snprintf(url, MAX_BASEURL, "GET /qvd/connect_to_vm?id=%d&qvd.client.os=%s&qvd.client.geometry=%s&qvd.client.link=%s&qvd.client.keyboard=%s&qvd.client.fullscreen=%d HTTP/1.1\nAuthorization: Basic %s\nConnection: Upgrade\nUpgrade: QVD/1.0\n\n", id, qvd->os, qvd->geometry, qvd->link, qvd->keyboard, qvd->fullscreen, qvd->authdigest) >= MAX_BASEURL) {
+  if (snprintf(url, MAX_BASEURL, "GET /qvd/connect_to_vm?id=%d&qvd.client.os=%s&qvd.client.geometry=%s&qvd.client.link=%s&qvd.client.keyboard=%s&qvd.client.fullscreen=%d HTTP/1.1\nAuthorization: %s %s\nConnection: Upgrade\nUpgrade: QVD/1.0\n\n",
+   id, qvd->os, qvd->geometry, qvd->link, qvd->keyboard, qvd->fullscreen, auth_method, auth_token) >= MAX_BASEURL) {
     qvd_error(qvd, "Error initializing authdigest\n");
     return 1;
   }

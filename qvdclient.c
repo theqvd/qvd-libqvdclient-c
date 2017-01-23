@@ -27,7 +27,7 @@
 
 void help(const char *program)
 {
-  printf("%s [-?] [-d] -h host [-p port] -u username -w pass [-g wxh] [-f] [-s n]\n\n"
+  printf("%s [-?] [-d] -h host [-p port] [-b bearer|-u username -w pass] [-g wxh] [-f] [-s n]\n\n"
          "  -? : shows this help\n"
          "  -v : shows version and exits\n"
 	 "  -d : Enables debugging\n"
@@ -38,6 +38,9 @@ void help(const char *program)
 	 "       The command line argument takes precedence, if specified\n"
 	 "  -w : indicates the password for the user. You can also set it up in the env var %s\n"
 	 "       The command line argument takes precedence, if specified\n"
+	 "  -b : indicates the bearer that will be used to stablish the connection. You can also set it up in the env var %s\n"
+	 "       The command line argument takes precedence, if specified\n"
+	 "       In this case the virtual machine must be provided with option -s\n"
 	 "  -g : indicates the geometry wxh. Example -g 1024x768\n"
 	 "  -f : Use fullscreen\n"
 	 "  -l : Use only list_of_vm (don't try to connect, useful for debugging)\n"
@@ -55,6 +58,7 @@ void help(const char *program)
 	 "  %s : Specifies the host to connect to, if not specified with -h\n"
 	 "  %s : Specifies the username, if not specified with -u\n"
 	 "  %s : Specifies the password, if not specified with -w\n"
+	 "  %s : Specifies the bearer, if not specified with -b\n"
 	 "  %s : Enables debugging, can also be enabled with -d\n"
 	 "  %s : Enables the file were debugging should go to\n"
 	 "  http_proxy/https_proxy: Optional variables to use for proxy settings\n"
@@ -63,13 +67,13 @@ void help(const char *program)
 	 "            export DISPLAY=localhost:0; xhost + localhost\n"
 	 "            xhost +si:localuser:$LOGNAME\n"
 	 "\nChangelog:\n%s\n",
-	 program, QVDHOST_ENV, QVDLOGIN_ENV, QVDPASSWORD_ENV,
-	 QVDHOST_ENV, QVDLOGIN_ENV, QVDPASSWORD_ENV, DEBUG_FLAG_ENV_VAR_NAME, DEBUG_FILE_ENV_VAR_NAME,
+	 program, QVDHOST_ENV, QVDLOGIN_ENV, QVDPASSWORD_ENV, QVDBEARER_ENV,
+	 QVDHOST_ENV, QVDLOGIN_ENV, QVDPASSWORD_ENV, QVDBEARER_ENV, DEBUG_FLAG_ENV_VAR_NAME, DEBUG_FILE_ENV_VAR_NAME,
 	 QVDCHANGELOG
 	 );
 }
 
-int parse_params(int argc, char **argv, const char **host, int *port, const char **user, const char **pass, const char **geometry, int *fullscreen, int *only_list_of_vm, int *one_vm, int *no_cert_check, int *restart_session, const char **nx_options, const char **client_cert, const char **client_key, int *twice, int *preselectedvm)
+int parse_params(int argc, char **argv, const char **host, int *port, const char **user, const char **pass, const char **bearer, const char **geometry, int *fullscreen, int *only_list_of_vm, int *one_vm, int *no_cert_check, int *restart_session, const char **nx_options, const char **client_cert, const char **client_key, int *twice, int *preselectedvm)
 {
   int opt, error = 0, version = 0;
   const char *program = argv[0];
@@ -78,8 +82,9 @@ int parse_params(int argc, char **argv, const char **host, int *port, const char
   *host = getenv(QVDHOST_ENV);
   *user = getenv(QVDLOGIN_ENV);
   *pass = getenv(QVDPASSWORD_ENV);
+  *bearer = getenv(QVDBEARER_ENV);
 
-  while ((opt = getopt(argc, argv, "?dvrh:p:u:w:g:flonx:c:k:2s:")) != -1 )
+  while ((opt = getopt(argc, argv, "?dvrh:p:u:w:b:g:flonx:c:k:2s:")) != -1 )
     {
       switch (opt)
 	{
@@ -107,6 +112,9 @@ int parse_params(int argc, char **argv, const char **host, int *port, const char
 	  break;
 	case 'w':
 	  *pass = optarg;
+	  break;
+	case 'b':
+	  *bearer = optarg;
 	  break;
 	case 'g':
 	  *geometry = optarg;
@@ -167,17 +175,11 @@ int parse_params(int argc, char **argv, const char **host, int *port, const char
       fprintf(stderr, "The host paramter -h is required\n");
       error = 1;
     }
-  if (*user == NULL)
+  if (*bearer == NULL && (*user == NULL || *pass == NULL))
     {
-      fprintf(stderr, "The user paramter -u is required\n");
+      fprintf(stderr, "Either bearer parameter -b, or user parameter -u and password parameter -w is required\n");
       error = 1;
     }
-  if (*pass == NULL)
-    {
-      fprintf(stderr, "The password paramter -w is required\n");
-      error = 1;
-    }
-
   if (*port < 1 || *port > 65535)
     {
       fprintf(stderr, "The port parameter must be between 1 and 65535\n");
@@ -283,11 +285,11 @@ int _set_display_if_not_set(qvdclient *qvd) {
   return 0;
 }
 
-int qvd_connection(const char *host, int port, const char *user, const char *pass, const char *geometry, int fullscreen, int only_list_of_vm, int one_vm, int no_cert_check, int restart_session, const char *nx_options, const char *client_cert, const char *client_key, int preselectedvm) {
+int qvd_connection(const char *host, int port, const char *user, const char *pass, const char *bearer, const char *geometry, int fullscreen, int only_list_of_vm, int one_vm, int no_cert_check, int restart_session, const char *nx_options, const char *client_cert, const char *client_key, int preselectedvm) {
   int vm_id;
   qvdclient *qvd;
 
-  qvd = qvd_init(host, port, user, pass);
+  qvd = qvd_init(host, port, user, pass, bearer);
 
   if (no_cert_check)
     qvd_set_no_cert_check(qvd);
@@ -306,13 +308,13 @@ int qvd_connection(const char *host, int port, const char *user, const char *pas
 
   if (qvd_list_of_vm(qvd) == NULL)
     {
-      printf("Error fetching vm for user %s in host %s: %s\n", user, host, qvd->error_buffer);
+      printf("Error fetching vm in host %s: %s\n", host, qvd->error_buffer);
       qvd_free(qvd);
       return 5;
     }
   if (qvd->numvms <= 0)
     {
-      printf("No vms found for user %s in host %s\n", user, host);
+      printf("No vms found in host %s\n", host);
       qvd_free(qvd);
       return 2;
     }
@@ -363,17 +365,17 @@ int qvd_connection(const char *host, int port, const char *user, const char *pas
 }
 
 int main(int argc, char *argv[], char *envp[]) {
-  const char *host = NULL, *user = NULL, *pass = NULL, *geometry = NULL, *nx_options = NULL, *cert_file = NULL, *key_file = NULL;
+  const char *host = NULL, *user = NULL, *pass = NULL, *bearer = NULL, *geometry = NULL, *nx_options = NULL, *cert_file = NULL, *key_file = NULL;
   int port = 8443, fullscreen=0, only_list_of_vm=0, one_vm=0, no_cert_check=0, restart_session = 0, twice = 0, preselectedvm=0;
   int result, vm_id;
   signal(SIGPIPE, SIG_IGN);
-  if (parse_params(argc, argv, &host, &port, &user, &pass, &geometry, &fullscreen, &only_list_of_vm, &one_vm, &no_cert_check, &restart_session, &nx_options, &cert_file, &key_file, &twice, &preselectedvm))
+  if (parse_params(argc, argv, &host, &port, &user, &pass, &bearer, &geometry, &fullscreen, &only_list_of_vm, &one_vm, &no_cert_check, &restart_session, &nx_options, &cert_file, &key_file, &twice, &preselectedvm))
     return 1;
 
-  result = qvd_connection(host, port, user, pass, geometry, fullscreen, only_list_of_vm, one_vm, no_cert_check, restart_session, nx_options, cert_file, key_file, preselectedvm);
+  result = qvd_connection(host, port, user, pass, bearer, geometry, fullscreen, only_list_of_vm, one_vm, no_cert_check, restart_session, nx_options, cert_file, key_file, preselectedvm);
   if (twice) {
     printf("Two connections requested. Result of first connection was %d\n", result);
-    result = qvd_connection(host, port, user, pass, geometry, fullscreen, only_list_of_vm, one_vm, no_cert_check, restart_session, nx_options, cert_file, key_file, preselectedvm);
+    result = qvd_connection(host, port, user, pass, bearer, geometry, fullscreen, only_list_of_vm, one_vm, no_cert_check, restart_session, nx_options, cert_file, key_file, preselectedvm);
   }
 
   return result;
