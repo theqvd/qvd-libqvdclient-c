@@ -33,7 +33,8 @@ void help(const char *program)
 	 "  -d : Enables debugging\n"
 	 "  -h : indicates the host to connect to. You can also set it up in the env var %s.\n"
 	 "       The command line argument takes precedence, if specified\n"
-	 "  -p : indicates the port to connect to, if not specified 8443 is used\n"
+	 "  -p : indicates the port to connect to, if not specified 8443 is used. You can also set it up in the env var %s.\n"
+	 "       The command line argument takes precedence, if specified\n"
 	 "  -u : indicates the username for the connection. You can also set it up in the env var %s\n"
 	 "       The command line argument takes precedence, if specified\n"
 	 "  -w : indicates the password for the user. You can also set it up in the env var %s\n"
@@ -52,25 +53,43 @@ void help(const char *program)
 	 "  -k : Specify client certificate key (PEM), requires -c. Example $HOME/.qvd/client.crt -k $HOME/.qvd/client.key\n"
 	 "  -r : Restart session. That is stop the VM before issuing a vm_connect\n"
 	 "  -2 : Specify to reconnect after the connection has finished. This is for testing only.\n"
-	 "  -s : Select the specific vm id. Usually used for testing."
+	 "  -s : Select the specific vm id. Usually used for testing. You can also set it up in the env var %s.\n"
+	 "       The command line argument takes precedence, if specified\n"
 	 "\n"
 	 "Environment variables:\n"
-	 "  %s : Specifies the host to connect to, if not specified with -h\n"
-	 "  %s : Specifies the username, if not specified with -u\n"
-	 "  %s : Specifies the password, if not specified with -w\n"
-	 "  %s : Specifies the bearer, if not specified with -b\n"
-	 "  %s : Enables debugging, can also be enabled with -d\n"
-	 "  %s : Enables the file were debugging should go to\n"
+	 "  %-14s : Specifies the host to connect to, if not specified with -h\n"
+	 "  %-14s : Specifies the port, if not specified with -p\n"
+	 "  %-14s : Specifies the username, if not specified with -u\n"
+	 "  %-14s : Specifies the password, if not specified with -w\n"
+	 "  %-14s : Specifies the the specific vm id, if not specified with -s\n"
+	 "  %-14s : Specifies the bearer, if not specified with -b\n"
+	 "  %-14s : Enables debugging, can also be enabled with -d\n"
+	 "  %-14s : Enables the file were debugging should go to\n"
 	 "  http_proxy/https_proxy: Optional variables to use for proxy settings\n"
-         "       See http://curl.haxx.se/docs/manpage.html for more information\n"
+     "       See http://curl.haxx.se/docs/manpage.html for more information\n"
 	 "  DISPLAY : Needed to be correctly setup. In some environments you might need to run one of the following:\n"
 	 "            export DISPLAY=localhost:0; xhost + localhost\n"
 	 "            xhost +si:localuser:$LOGNAME\n"
 	 "\nChangelog:\n%s\n",
-	 program, QVDHOST_ENV, QVDLOGIN_ENV, QVDPASSWORD_ENV, QVDBEARER_ENV,
-	 QVDHOST_ENV, QVDLOGIN_ENV, QVDPASSWORD_ENV, QVDBEARER_ENV, DEBUG_FLAG_ENV_VAR_NAME, DEBUG_FILE_ENV_VAR_NAME,
+	 program, QVDHOST_ENV, QVDPORT_ENV, QVDLOGIN_ENV, QVDPASSWORD_ENV, QVDBEARER_ENV, QVDVMID_ENV,
+	 QVDHOST_ENV, QVDPORT_ENV, QVDLOGIN_ENV, QVDPASSWORD_ENV, QVDVMID_ENV, QVDBEARER_ENV, DEBUG_FLAG_ENV_VAR_NAME, DEBUG_FILE_ENV_VAR_NAME,
 	 QVDCHANGELOG
 	 );
+}
+
+int getintenv(const char *env, int defaultvalue) {
+    int parsedvalue;
+    char *parsedstr = getenv(env);
+    if (parsedstr == NULL)
+        return defaultvalue;
+
+    errno = 0;
+    parsedvalue = strtol(parsedstr, NULL, 0);
+    if (errno != 0) {
+        return defaultvalue;
+    }
+
+    return parsedvalue;
 }
 
 int parse_params(int argc, char **argv, const char **host, int *port, const char **user, const char **pass, const char **bearer, const char **geometry, int *fullscreen, int *only_list_of_vm, int *one_vm, int *no_cert_check, int *restart_session, const char **nx_options, const char **client_cert, const char **client_key, int *twice, int *preselectedvm)
@@ -83,6 +102,8 @@ int parse_params(int argc, char **argv, const char **host, int *port, const char
   *user = getenv(QVDLOGIN_ENV);
   *pass = getenv(QVDPASSWORD_ENV);
   *bearer = getenv(QVDBEARER_ENV);
+  *port = getintenv(QVDPORT_ENV, *port);
+  *preselectedvm = getintenv(QVDVMID_ENV, *preselectedvm);
 
   while ((opt = getopt(argc, argv, "?dvrh:p:u:w:b:g:flonx:c:k:2s:")) != -1 )
     {

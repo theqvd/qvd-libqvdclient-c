@@ -26,9 +26,10 @@
 /* #define BUFFER_SIZE CURL_MAX_WRITE_SIZE * 2 */
 #define BUFFER_SIZE 65536
 #include "qvdbuffer.h"
-#define QVDVERSION 123
-#define QVDABOUT "Version: 1.2.3. $Id$"
-#define QVDCHANGELOG "1.2.3 30/04/2016 Allow to preselect VM\n" \
+#define QVDVERSION 124
+#define QVDABOUT "Version: 1.2.4. $Id$"
+#define QVDCHANGELOG "1.2.4 04/04/2018 Added support for environment variables QVDPORT QVDVMID\n" \
+                     "1.2.3 30/04/2016 Allow to preselect VM\n" \
                      "1.2.2 30/04/2016 Change license to GPLv2\n" \
                      "1.2.1 26/08/2015 Use ASL logging for Apple, openssl: 1.0.2d, jansson: 2.7\n" \
                      "1.2.0 07/05/2015 Improve Select on write file descriptors\n" \
@@ -73,6 +74,8 @@
 #define QVDPASSWORD_ENV "QVDPASSWORD"
 #define QVDBEARER_ENV "QVDBEARER"
 #define QVDHOST_ENV "QVDHOST"
+#define QVDPORT_ENV "QVDPORT"
+#define QVDVMID_ENV "QVDVMID"
 #define CONF_DIR ".qvd"
 #define CERT_DIR ".qvd/certs"
 #define MAX_NX_OPTS_BUFFER 256
