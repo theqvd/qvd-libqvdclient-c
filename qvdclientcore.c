@@ -159,7 +159,7 @@ qvdclient *qvd_init(const char *hostname, const int port, const char *username, 
   qvd_set_link(qvd, DEFAULT_LINK);
   qvd_set_geometry(qvd, DEFAULT_GEOMETRY);
   qvd_set_os(qvd, DEFAULT_OS);
-  qvd->keyboard = "pc%2F105";
+  qvd->keyboard = "pc105%2Ffr";
   qvd->fullscreen = 0;
   qvd->print_enabled = 0;
   qvd->ssl_no_cert_check = 0;
