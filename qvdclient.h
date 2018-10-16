@@ -27,7 +27,7 @@
 #define BUFFER_SIZE 65536
 #include "qvdbuffer.h"
 #define QVDVERSION 124
-#define QVDABOUT "Version: 1.2.4. $Id$"
+#define QVDABOUT "Version: 1.2.4-nsa. $Id$"
 #define QVDCHANGELOG "1.2.4 04/04/2018 Added support for environment variables QVDPORT QVDVMID\n" \
                      "1.2.3 30/04/2016 Allow to preselect VM\n" \
                      "1.2.2 30/04/2016 Change license to GPLv2\n" \
