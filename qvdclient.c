@@ -48,7 +48,7 @@ void help(const char *program)
 	 "  -o : Assume One VM, that is connect always to the first VM (useful for debugging)\n"
 	 "  -n : No strict certificate checking, always accept certificate\n"
 	 "  -x : NX client options. Example: nx/nx,data=0,delta=0,cache=16384,pack=0:0\n"
-	 "       Example: nx/nx,media=4713,cups=631,limit=5m,images=268435456,cache=67108864:0"
+	 "       Example: nx/nx,media=4713,cups=631,limit=5m,images=268435456,cache=67108864:0\n"
 	 "  -c : Specify client certificate (PEM), it requires also -k. Example -c $HOME/.qvd/client.crt -k $HOME/.qvd/client.key\n"
 	 "  -k : Specify client certificate key (PEM), requires -c. Example $HOME/.qvd/client.crt -k $HOME/.qvd/client.key\n"
 	 "  -r : Restart session. That is stop the VM before issuing a vm_connect\n"
