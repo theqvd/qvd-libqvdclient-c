@@ -49,6 +49,7 @@ void help(const char *program)
 	 "  -n : No strict certificate checking, always accept certificate\n"
 	 "  -x : NX client options. Example: nx/nx,data=0,delta=0,cache=16384,pack=0:0\n"
 	 "       Example: nx/nx,media=4713,cups=631,limit=5m,images=268435456,cache=67108864:0\n"
+	 "  -K : indicates the desired keyboard layout. Example -K pc105/es. Default: pc105/en\n"
 	 "  -c : Specify client certificate (PEM), it requires also -k. Example -c $HOME/.qvd/client.crt -k $HOME/.qvd/client.key\n"
 	 "  -k : Specify client certificate key (PEM), requires -c. Example $HOME/.qvd/client.crt -k $HOME/.qvd/client.key\n"
 	 "  -r : Restart session. That is stop the VM before issuing a vm_connect\n"
@@ -92,7 +93,7 @@ int getintenv(const char *env, int defaultvalue) {
     return parsedvalue;
 }
 
-int parse_params(int argc, char **argv, const char **host, int *port, const char **user, const char **pass, const char **bearer, const char **geometry, int *fullscreen, int *only_list_of_vm, int *one_vm, int *no_cert_check, int *restart_session, const char **nx_options, const char **client_cert, const char **client_key, int *twice, int *preselectedvm)
+int parse_params(int argc, char **argv, const char **host, int *port, const char **user, const char **pass, const char **bearer, const char **geometry, int *fullscreen, int *only_list_of_vm, int *one_vm, int *no_cert_check, int *restart_session, const char **nx_options, const char **kb_layout, const char **client_cert, const char **client_key, int *twice, int *preselectedvm)
 {
   int opt, error = 0, version = 0;
   const char *program = argv[0];
@@ -105,7 +106,7 @@ int parse_params(int argc, char **argv, const char **host, int *port, const char
   *port = getintenv(QVDPORT_ENV, *port);
   *preselectedvm = getintenv(QVDVMID_ENV, *preselectedvm);
 
-  while ((opt = getopt(argc, argv, "?dvrh:p:u:w:b:g:flonx:c:k:2s:")) != -1 )
+  while ((opt = getopt(argc, argv, "?dvrh:p:u:w:b:g:flonx:K:c:k:2s:")) != -1 )
     {
       switch (opt)
 	{
@@ -154,6 +155,9 @@ int parse_params(int argc, char **argv, const char **host, int *port, const char
 	  break;
 	case 'x':
 	  *nx_options = optarg;
+	  break;
+	case 'K':
+	  *kb_layout = optarg;
 	  break;
 	case 'c':
 	  *client_cert = optarg;
@@ -306,7 +310,7 @@ int _set_display_if_not_set(qvdclient *qvd) {
   return 0;
 }
 
-int qvd_connection(const char *host, int port, const char *user, const char *pass, const char *bearer, const char *geometry, int fullscreen, int only_list_of_vm, int one_vm, int no_cert_check, int restart_session, const char *nx_options, const char *client_cert, const char *client_key, int preselectedvm) {
+int qvd_connection(const char *host, int port, const char *user, const char *pass, const char *bearer, const char *geometry, int fullscreen, int only_list_of_vm, int one_vm, int no_cert_check, int restart_session, const char *nx_options, const char *kb_layout, const char *client_cert, const char *client_key, int preselectedvm) {
   int vm_id;
   qvdclient *qvd;
 
@@ -321,6 +325,8 @@ int qvd_connection(const char *host, int port, const char *user, const char *pas
     qvd_set_fullscreen(qvd);
   if (nx_options)
     qvd_set_nx_options(qvd, nx_options);
+  if (kb_layout)
+    qvd_set_kb_layout(qvd, kb_layout);
 
   qvd_set_cert_files(qvd, client_cert, client_key);
 
@@ -386,17 +392,17 @@ int qvd_connection(const char *host, int port, const char *user, const char *pas
 }
 
 int main(int argc, char *argv[], char *envp[]) {
-  const char *host = NULL, *user = NULL, *pass = NULL, *bearer = NULL, *geometry = NULL, *nx_options = NULL, *cert_file = NULL, *key_file = NULL;
+  const char *host = NULL, *user = NULL, *pass = NULL, *bearer = NULL, *geometry = NULL, *nx_options = NULL, *kb_layout = NULL, *cert_file = NULL, *key_file = NULL;
   int port = 8443, fullscreen=0, only_list_of_vm=0, one_vm=0, no_cert_check=0, restart_session = 0, twice = 0, preselectedvm=0;
   int result, vm_id;
   signal(SIGPIPE, SIG_IGN);
-  if (parse_params(argc, argv, &host, &port, &user, &pass, &bearer, &geometry, &fullscreen, &only_list_of_vm, &one_vm, &no_cert_check, &restart_session, &nx_options, &cert_file, &key_file, &twice, &preselectedvm))
+  if (parse_params(argc, argv, &host, &port, &user, &pass, &bearer, &geometry, &fullscreen, &only_list_of_vm, &one_vm, &no_cert_check, &restart_session, &nx_options, &kb_layout, &cert_file, &key_file, &twice, &preselectedvm))
     return 1;
 
-  result = qvd_connection(host, port, user, pass, bearer, geometry, fullscreen, only_list_of_vm, one_vm, no_cert_check, restart_session, nx_options, cert_file, key_file, preselectedvm);
+  result = qvd_connection(host, port, user, pass, bearer, geometry, fullscreen, only_list_of_vm, one_vm, no_cert_check, restart_session, nx_options, kb_layout, cert_file, key_file, preselectedvm);
   if (twice) {
     printf("Two connections requested. Result of first connection was %d\n", result);
-    result = qvd_connection(host, port, user, pass, bearer, geometry, fullscreen, only_list_of_vm, one_vm, no_cert_check, restart_session, nx_options, cert_file, key_file, preselectedvm);
+    result = qvd_connection(host, port, user, pass, bearer, geometry, fullscreen, only_list_of_vm, one_vm, no_cert_check, restart_session, nx_options, kb_layout, cert_file, key_file, preselectedvm);
   }
 
   return result;

@@ -159,7 +159,7 @@ qvdclient *qvd_init(const char *hostname, const int port, const char *username, 
   qvd_set_link(qvd, DEFAULT_LINK);
   qvd_set_geometry(qvd, DEFAULT_GEOMETRY);
   qvd_set_os(qvd, DEFAULT_OS);
-  qvd->keyboard = "pc105%2Ffr";
+  qvd_set_kb_layout(qvd, DEFAULT_KB_LAYOUT);
   qvd->fullscreen = 0;
   qvd->print_enabled = 0;
   qvd->ssl_no_cert_check = 0;
@@ -473,6 +473,10 @@ void qvd_set_geometry(qvdclient *qvd, const char *geometry) {
 void qvd_set_link(qvdclient *qvd, const char *link) {
   strncpy(qvd->link, link, MAX_LINK);
   qvd->os[MAX_LINK - 1] = '\0';
+}
+void qvd_set_kb_layout(qvdclient *qvd, const char *kb_layout) {
+  strncpy(qvd->keyboard, kb_layout, MAX_KB_LAYOUT);
+  qvd->keyboard[MAX_KB_LAYOUT - 1] = '\0';
 }
 
 void qvd_set_no_cert_check(qvdclient *qvd) {

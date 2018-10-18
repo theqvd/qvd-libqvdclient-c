@@ -26,9 +26,10 @@
 /* #define BUFFER_SIZE CURL_MAX_WRITE_SIZE * 2 */
 #define BUFFER_SIZE 65536
 #include "qvdbuffer.h"
-#define QVDVERSION 124
-#define QVDABOUT "Version: 1.2.4-nsa1-fr. $Id$"
-#define QVDCHANGELOG "1.2.4 04/04/2018 Added support for environment variables QVDPORT QVDVMID\n" \
+#define QVDVERSION 125
+#define QVDABOUT "Version: 1.2.5. $Id$"
+#define QVDCHANGELOG "1.2.5 17/10/2018 Unhardcode keyboard layout\n" \
+                     "1.2.4 04/04/2018 Added support for environment variables QVDPORT QVDVMID\n" \
                      "1.2.3 30/04/2016 Allow to preselect VM\n" \
                      "1.2.2 30/04/2016 Change license to GPLv2\n" \
                      "1.2.1 26/08/2015 Use ASL logging for Apple, openssl: 1.0.2d, jansson: 2.7\n" \
@@ -62,6 +63,8 @@
 #define MAX_USERAGENT 128
 #define MAX_OS 128
 #define DEFAULT_OS "linux"
+#define MAX_KB_LAYOUT 16
+#define DEFAULT_KB_LAYOUT "pc105/en"
 #define MAX_GEOMETRY 128
 #define DEFAULT_GEOMETRY "800x600"
 #define MAX_LINK 128
@@ -128,7 +131,7 @@ struct qvdclientstruct {
   char link[MAX_LINK];
   char geometry[MAX_GEOMETRY];
   char os[MAX_OS];
-  const char *keyboard;
+  char keyboard[MAX_KB_LAYOUT];
   int print_enabled;
   int fullscreen;
   char display[MAXDISPLAYSTRING];
@@ -166,8 +169,8 @@ void qvd_set_display(qvdclient *qvd, const char *display);
 void qvd_set_home(qvdclient *qvd, const char *home);
 void qvd_set_useragent(qvdclient *qvd, const char *useragent);
 void qvd_set_os(qvdclient *qvd, const char *os);
-void qvd_set_geometry(qvdclient *qvd, const char *geometry);
 void qvd_set_link(qvdclient *qvd, const char *link);
+void qvd_set_kb_layout(qvdclient *qvd, const char *kb_layout);
 void qvd_set_no_cert_check(qvdclient *qvd);
 void qvd_set_strict_cert_check(qvdclient *qvd);
 void qvd_set_unknown_cert_callback(qvdclient *qvd, int (*ssl_verify_callback)(qvdclient *, const char *cert_pem_str, const char *cert_pem_data));
