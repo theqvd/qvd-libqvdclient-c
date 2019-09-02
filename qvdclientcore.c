@@ -1151,7 +1151,7 @@ int _qvd_verify_cert_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)
   if (depth < MAX_CERTS && !certificate[depth]) {
     certificate[depth] = cert;
     certificate_error[depth] = err;
-    cert->references++;
+    X509_up_ref(cert);
   }
 
   /* See http://www.openssl.org/docs/ssl/SSL_CTX_set_verify.html# */
