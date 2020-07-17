@@ -16,9 +16,16 @@ These prerequistes are needed to build this package:
  - jansson
  - libjpeg
  - libpng
+ - libidn
+ - libldap
  - qvd-nxagent
  - qvd-nxcomp
  - qvd-nxproxy
+
+For Ubuntu, run:
+
+    apt install build-essential libssl-dev libcurl4-openssl-dev libjansson-dev libjpeg-dev libpng-dev libidn11-dev libldap-dev 
+
 
 LICENSE
 =======

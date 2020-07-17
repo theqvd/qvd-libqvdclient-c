@@ -11,7 +11,7 @@ QVDCLIENT=qvdclient
 QVDCLIENTOBJ=$(QVDCLIENT).o
 QVDCLIENTLIBLIBS=-L. -lcurl -lcrypto -lssl -lldap -lidn -lrt -ljansson -lXcomp
 QVDCLIENTLIBS=-L. -lqvdclient
-CFLAGS:=-fPIC -g $(CFLAGS)
+CFLAGS:=-fPIC -g -I/usr/include/nx -I/usr/include/x86_64-linux-gnu/nx $(CFLAGS)
 STATICLIBS=
 STDCLIB=
 

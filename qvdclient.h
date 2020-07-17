@@ -51,7 +51,8 @@
 #define DEBUG_FLAG_ENV_VAR_NAME "QVD_DEBUG"
 #define DEBUG_FILE_ENV_VAR_NAME "QVD_DEBUG_FILE"
 #define MAX_USERPWD 256
-#define MAX_AUTHDIGEST 4+MAX_USERPWD*4/3
+#define MAX_BEARER 4+MAX_USERPWD*4/3
+#define MAX_AUTHDIGEST (MAX_BEARER*2)
 #define MAX_BASEURL 1024
 #define MAX_PARAM 32
 #define MAX_ERROR_BUFFER 256
@@ -60,7 +61,7 @@
 /* This can be also a session takeover or VM start */
 #define MAX_HTTP_RESPONSES_FOR_UPGRADE 60
 #define DEFAULT_USERAGENT_PRODUCT "QVD/3.1"
-#define MAX_USERAGENT 128
+#define MAX_USERAGENT 512
 #define MAX_OS 128
 #define DEFAULT_OS "linux"
 #define MAX_KB_LAYOUT 16
@@ -122,7 +123,7 @@ struct qvdclientstruct {
   char password[MAX_USERPWD];
   char userpwd[MAX_USERPWD];
   char authdigest[MAX_AUTHDIGEST];
-  char bearer[MAX_AUTHDIGEST];
+  char bearer[MAX_BEARER];
   int use_bearer;
   char baseurl[MAX_BASEURL];
   int numvms;

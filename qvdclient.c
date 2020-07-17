@@ -315,6 +315,10 @@ int qvd_connection(const char *host, int port, const char *user, const char *pas
   qvdclient *qvd;
 
   qvd = qvd_init(host, port, user, pass, bearer);
+  if (!qvd) {
+    printf("Error initializing QVD object, aborting");
+    return 9;
+  }
 
   if (no_cert_check)
     qvd_set_no_cert_check(qvd);
